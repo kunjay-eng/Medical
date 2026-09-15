@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>อ่านใบนัด/ฉลากยาด้วย AI — Medical Manager</title>
+<style>
+  :root{
+    --bg:#F7F3EE; --card:#FFFFFF; --line:#E6DFD6; --ink:#3A2E28; --ink-soft:#8A7E73;
+    --accent:#FF6B4A; --mint:#2FAE7A; --danger:#E5484D; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--ink); padding:16px; padding-bottom:80px;
+  }
+  h1{font-size:18px; margin:0 0 4px;}
+  p.sub{font-size:12.5px; color:var(--ink-soft); margin:0 0 16px;}
+  .card{background:var(--card); border:1.5px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:14px;}
+  label{display:block; font-size:12.5px; font-weight:700; color:var(--ink-soft); margin-bottom:6px; margin-top:10px;}
+  label:first-child{margin-top:0;}
+  input[type=password], input[type=text], input[type=number], input[type=date], input[type=time], input[type=datetime-local]{
+    width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px;
+    font-size:14px; background:var(--bg); color:var(--ink);
+  }
+  select, textarea{
+    width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px;
+    font-size:14px; background:var(--bg); color:var(--ink); font-family:inherit;
+  }
+  textarea{min-height:60px; resize:vertical;}
+  .hint{font-size:11px; color:var(--ink-soft); margin-top:6px; line-height:1.5;}
+  .hint a{color:var(--accent);}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:12px 16px; border-radius:12px; border:none; font-size:14.5px; font-weight:700;
+    cursor:pointer; width:100%;
+  }
+  .btn-primary{background:var(--accent); color:#fff;}
+  .btn-primary:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-ghost{background:var(--card); color:var(--ink); border:1.5px solid var(--line);}
+  .btn-mint{background:var(--mint); color:#fff;}
+  #fileInput{display:none;}
+  .thumbs{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+  .thumb{position:relative; width:76px; height:76px; border-radius:10px; overflow:hidden; border:1.5px solid var(--line);}
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .thumb .rm{
+    position:absolute; top:2px; right:2px; background:rgba(0,0,0,.55); color:#fff; border:none;
+    width:20px; height:20px; border-radius:50%; font-size:12px; cursor:pointer; line-height:1;
+  }
+  .spinner{
+    width:22px; height:22px; border:3px solid rgba(0,0,0,.1); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite; margin:0 auto;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .status{font-size:12.5px; color:var(--ink-soft); text-align:center; margin-top:10px;}
+  .section-title{font-size:13px; font-weight:700; margin:18px 0 8px;}
+  .field-row{display:flex; gap:8px;}
+  .field-row > div{flex:1;}
+  .error-box{background:#FDEDED; border:1.5px solid var(--danger); color:var(--danger); border-radius:10px; padding:10px 12px; font-size:12.5px; margin-top:10px;}
+  .warn-box{background:#FFF6E5; border:1.5px solid #E0A93A; color:#8A6412; border-radius:10px; padding:10px 12px; font-size:12.5px; margin-top:10px;}
+  #reviewCard{display:none;}
+  .doc-toggle{display:flex; gap:8px;}
+  .doc-toggle button{flex:1; padding:10px; border-radius:10px; border:1.5px solid var(--line); background:var(--card); color:var(--ink); font-size:13px; font-weight:700; cursor:pointer;}
+  .doc-toggle button.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .tri{display:flex; gap:6px;}
+  .tri button{flex:1; padding:9px 6px; border-radius:10px; border:1.5px solid var(--line); background:var(--card); color:var(--ink); font-size:12.5px; cursor:pointer;}
+  .tri button.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+</style>
+</head>
+<body>
+
+<h1>📸 อ่านใบนัด/ฉลากยาด้วย AI</h1>
+<p class="sub">ถ่ายรูปหรืออัปโหลดรูป แล้วให้ AI อ่านให้ — ตรวจสอบ/แก้ไขผลลัพธ์ในหน้านี้ก่อนส่งกลับไปกรอกฟอร์มเสมอ (AI อาจอ่านผิดได้ อย่าเชื่อ 100% โดยเฉพาะเรื่องงดน้ำ/งดอาหาร)</p>
+
+<div class="card">
+  <label>ประเภทเอกสาร</label>
+  <div class="doc-toggle">
+    <button type="button" id="docApptBtn">🗓 บัตรนัด (นัดหมาย)</button>
+    <button type="button" id="docMedBtn">💊 ฉลากยา</button>
+  </div>
+</div>
+
+<div class="card" id="keyCard">
+  <label for="apiKey">Gemini API Key (ฟรี, ใส่ครั้งเดียวจำไว้ในเครื่องนี้)</label>
+  <input type="password" id="apiKey" placeholder="วางคีย์ที่นี่">
+  <div class="hint">
+    ยังไม่มีคีย์? ไปขอฟรีที่ <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (ล็อกอินด้วย Gmail แล้วกด Create API Key)<br>
+    คีย์จะถูกเก็บไว้ใน localStorage ของเบราว์เซอร์เครื่องนี้เท่านั้น ไม่ถูกส่งไปที่ไหนนอกจาก Google
+  </div>
+</div>
+
+<div class="card">
+  <label>รูปภาพ</label>
+  <input type="file" id="fileInput" accept="image/*" capture="environment" multiple>
+  <button class="btn btn-ghost" id="pickBtn">➕ ถ่ายรูป / เลือกรูป (เลือกได้หลายรูป)</button>
+  <div class="thumbs" id="thumbs"></div>
+</div>
+
+<button class="btn btn-primary" id="readBtn">🤖 อ่านด้วย AI</button>
+<div id="statusArea"></div>
+
+<!-- ========== ฟอร์มตรวจสอบผล: บัตรนัด ========== -->
+<div class="card" id="reviewApptCard" style="display:none;">
+  <div class="section-title">✅ ตรวจสอบผลลัพธ์ (นัดหมาย) ก่อนส่งไปกรอกฟอร์ม</div>
+  <label>โรงพยาบาล *</label><input type="text" id="aHospital">
+  <div class="field-row"><div><label>วันที่นัด *</label><input type="date" id="aDate"></div><div><label>เวลานัด *</label><input type="time" id="aTime"></div></div>
+  <div class="field-row"><div><label>แผนก</label><input type="text" id="aDept"></div><div><label>แพทย์</label><input type="text" id="aDoctor"></div></div>
+  <label>ประเภทนัด</label>
+  <select id="aType"><option value="">- ไม่ระบุ (เลือกเองในฟอร์มหลัก) -</option></select>
+  <label>นัดเพื่อ</label><input type="text" id="aPurpose">
+
+  <div class="section-title">⚠️ การเตรียมตัว (ใส่เฉพาะที่ใบนัดระบุชัดเจน)</div>
+  <label>งดอาหาร?</label>
+  <div class="tri" id="triFood">
+    <button type="button" data-val="unknown" class="active">ไม่ทราบ</button>
+    <button type="button" data-val="true">ต้องงด</button>
+    <button type="button" data-val="false">ไม่ต้องงด</button>
+  </div>
+  <label>งดน้ำ?</label>
+  <div class="tri" id="triWater">
+    <button type="button" data-val="unknown" class="active">ไม่ทราบ</button>
+    <button type="button" data-val="true">ต้องงด</button>
+    <button type="button" data-val="false">ไม่ต้องงด</button>
+  </div>
+  <label>เริ่มงดตั้งแต่ (วัน-เวลา — คำนวณจากใบนัดถ้าระบุจำนวนชั่วโมงไว้)</label>
+  <input type="datetime-local" id="aFastingStart">
+  <label>รายละเอียดคำแนะนำจากใบนัด</label><textarea id="aFastingInstruction"></textarea>
+  <label>หมายเหตุ (เช่น รหัสตรวจ Lab ที่ระบุในใบนัด)</label><textarea id="aNote"></textarea>
+
+  <button class="btn btn-mint" id="confirmApptBtn" style="margin-top:18px;">✔ ยืนยัน ส่งกลับไปกรอกฟอร์มนัดหมาย</button>
+</div>
+
+<!-- ========== ฟอร์มตรวจสอบผล: ฉลากยา ========== -->
+<div class="card" id="reviewMedCard" style="display:none;">
+  <div class="section-title">✅ ตรวจสอบผลลัพธ์ (ยา) ก่อนส่งไปกรอกฟอร์ม</div>
+  <div class="warn-box">ถ้าเป็นยาจากโรงพยาบาล กลับไปเลือก "ประวัติการรักษาที่เกี่ยวข้อง" เองในฟอร์มหลักด้วย เพราะ AI ไม่รู้ว่าเชื่อมกับนัดหมายไหน</div>
+  <label>ชื่อยา *</label><input type="text" id="mName">
+  <label>แหล่งที่มาของยา</label>
+  <select id="mSource">
+    <option value="โรงพยาบาล (ตามนัด/ใบสั่งแพทย์)">โรงพยาบาล (ตามนัด/ใบสั่งแพทย์)</option>
+    <option value="ร้านเภสัช (ซื้อเอง)">ร้านเภสัช (ซื้อเอง)</option>
+  </select>
+  <div id="mPharmWrap" style="display:none;">
+    <label>ชื่อร้านเภสัช</label><input type="text" id="mPharmacy">
+    <label>เบอร์โทรร้าน</label><input type="text" id="mPharmacyPhone">
+  </div>
+  <label>ขนาดยา</label><input type="text" id="mStrength" placeholder="เช่น 500 มก.">
+  <label>วิธีใช้</label><input type="text" id="mDosage" placeholder="เช่น ครั้งละ 1 เม็ด">
+  <label>ความถี่</label><input type="text" id="mFreq" placeholder="เช่น วันละ 2 ครั้ง เช้า-เย็น">
+  <label>ก่อน/หลังอาหาร</label>
+  <select id="mMeal"><option value="">- ไม่ระบุ -</option></select>
+  <div class="field-row"><div><label>จำนวน</label><input type="number" id="mQty"></div><div><label>วันที่เริ่มใช้</label><input type="date" id="mStart"></div></div>
+
+  <button class="btn btn-mint" id="confirmMedBtn" style="margin-top:18px;">✔ ยืนยัน ส่งกลับไปกรอกฟอร์มยา</button>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const SESSION = params.get('session');
+let docType = params.get('doc') === 'medicine' ? 'medicine' : 'appointment';
+
+// เพิ่ม v1.12: ต้องตรงกับ APPOINTMENT_TYPE_OPTIONS / BEFORE_AFTER_MEAL_OPTIONS ใน Code.gs/Api.gs ทุกตัวอักษร
+const APPOINTMENT_TYPES = ['ตรวจติดตามอาการ', 'ติดตามผลหลังเริ่มยา', 'ฟังผลตรวจเลือด', 'ฟังผลตรวจ / อ่านผล CT, MRI', 'ตรวจฟัน', 'ฉีดวัคซีน', 'นัดผ่าตัด / เตรียมผ่าตัด', 'นัดติดตามหลังผ่าตัด', 'ปรึกษาแพทย์เฉพาะทาง', 'นัดตรวจประจำปี', 'ตรวจเพิ่มเติม', 'อื่น ๆ'];
+const BEFORE_AFTER_MEAL_OPTIONS = ['ก่อนอาหาร', 'หลังอาหาร', 'พร้อมอาหาร', 'ไม่ระบุ'];
+
+if (window.opener){
+  window.opener.postMessage({ type: 'OCR_READY', session: SESSION }, '*');
+}
+
+function esc(s){ return (s || '').toString().replace(/"/g, '&quot;'); }
+
+function populateSelect_(id, options){
+  const el = document.getElementById(id);
+  options.forEach(o => { const opt = document.createElement('option'); opt.value = o; opt.textContent = o; el.appendChild(opt); });
+}
+populateSelect_('aType', APPOINTMENT_TYPES);
+populateSelect_('mMeal', BEFORE_AFTER_MEAL_OPTIONS);
+
+document.getElementById('mSource').addEventListener('change', function(){
+  document.getElementById('mPharmWrap').style.display = this.value === 'ร้านเภสัช (ซื้อเอง)' ? '' : 'none';
+});
+
+function setDocType(t){
+  docType = t;
+  document.getElementById('docApptBtn').classList.toggle('active', t === 'appointment');
+  document.getElementById('docMedBtn').classList.toggle('active', t === 'medicine');
+  document.getElementById('reviewApptCard').style.display = 'none';
+  document.getElementById('reviewMedCard').style.display = 'none';
+}
+document.getElementById('docApptBtn').onclick = () => setDocType('appointment');
+document.getElementById('docMedBtn').onclick = () => setDocType('medicine');
+setDocType(docType);
+
+function setupTri_(groupId){
+  const group = document.getElementById(groupId);
+  group.querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => {
+      group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+  });
+}
+setupTri_('triFood');
+setupTri_('triWater');
+function triValue_(groupId){
+  const active = document.querySelector('#' + groupId + ' button.active');
+  const v = active ? active.dataset.val : 'unknown';
+  return v === 'true' ? true : (v === 'false' ? false : null);
+}
+function setTriValue_(groupId, val){
+  const group = document.getElementById(groupId);
+  group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  const key = val === true ? 'true' : (val === false ? 'false' : 'unknown');
+  const btn = group.querySelector('button[data-val="' + key + '"]');
+  if (btn) btn.classList.add('active');
+}
+
+const apiKeyInput = document.getElementById('apiKey');
+apiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+apiKeyInput.addEventListener('input', () => localStorage.setItem('gemini_api_key', apiKeyInput.value.trim()));
+
+let files = [];
+
+document.getElementById('pickBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = (e) => {
+  files = files.concat(Array.from(e.target.files));
+  renderThumbs();
+  e.target.value = '';
+};
+
+function renderThumbs(){
+  const wrap = document.getElementById('thumbs');
+  wrap.innerHTML = '';
+  files.forEach((f, i) => {
+    const url = URL.createObjectURL(f);
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `<img src="${url}"><button class="rm" data-i="${i}">✕</button>`;
+    div.querySelector('.rm').onclick = () => { files.splice(i, 1); renderThumbs(); };
+    wrap.appendChild(div);
+  });
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function setStatus(html){
+  document.getElementById('statusArea').innerHTML = html;
+}
+
+// ============================================================
+// Schema + Prompt: บัตรนัด (Appointment)
+// ============================================================
+const APPT_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    hospital: { type: "STRING", description: "ชื่อโรงพยาบาล/คลินิก มักอยู่หัวกระดาษพร้อมโลโก้" },
+    department: { type: "STRING", description: "แผนกที่นัด ถ้าไม่เห็นให้เว้นว่าง" },
+    doctor: { type: "STRING", description: "ชื่อแพทย์ ถ้าไม่เห็นให้เว้นว่าง" },
+    appointment_date: { type: "STRING", description: "วันที่นัด รูปแบบ YYYY-MM-DD (ค.ศ./Gregorian เท่านั้น) — ถ้าเอกสารเขียนปี พ.ศ. (เช่น 2569) ให้ลบ 543 ก่อนแปลงเป็น ค.ศ. เอง (2569-543=2026)" },
+    appointment_time: { type: "STRING", description: "เวลานัด รูปแบบ HH:MM 24 ชม. — ถ้าเอกสารแสดงเป็นช่วงเวลา (เช่น 7:00-7:30) ให้ใช้เวลาเริ่มต้นเท่านั้น" },
+    appointment_type: { type: "STRING", description: "หมวดหมู่ประเภทนัด เลือกจากรายการที่กำหนดให้เท่านั้นถ้ามั่นใจจริง ๆ ว่าตรง ไม่งั้นเว้นว่างไว้ ห้ามเดา" },
+    purpose: { type: "STRING", description: "จุดประสงค์ของการนัด (มักอยู่หลังคำว่า 'เพื่อ' หรือ 'For') สรุปสั้น ๆ" },
+    fasting_food: { type: "BOOLEAN", description: "true ถ้าเอกสารระบุชัดเจนว่าต้องงดอาหาร, false ถ้าระบุชัดว่าไม่ต้องงด, ถ้าไม่ได้พูดถึงเรื่องนี้เลยให้เว้น field นี้ไว้ (ห้ามเดาเป็น false)" },
+    fasting_water: { type: "BOOLEAN", description: "true ถ้าเอกสารระบุชัดเจนว่าต้องงดน้ำด้วย, false ถ้าระบุว่าดื่มน้ำเปล่าได้ตามปกติ, ถ้าไม่ได้พูดถึงเรื่องนี้เลยให้เว้น field นี้ไว้" },
+    fasting_hours_before: { type: "NUMBER", description: "จำนวนชั่วโมงที่ต้องงดก่อนถึงเวลานัด ถ้าเอกสารระบุไว้ตรง ๆ (เช่น 'งดอาหาร 12 ชั่วโมงก่อนมาเจาะเลือด' = 12) ถ้าไม่ได้ระบุเป็นตัวเลขชั่วโมงเว้นว่างไว้" },
+    fasting_instruction: { type: "STRING", description: "คัดลอกข้อความคำแนะนำเรื่องงดน้ำ/อาหารมาเกือบทั้งหมดตามที่เอกสารเขียนไว้" },
+    note: { type: "STRING", description: "หมายเหตุอื่น ๆ ที่ไม่เกี่ยวกับการงดน้ำ/อาหาร เช่น รหัสการตรวจ Lab (เช่น SSO HT, FBS, Tg), เบอร์ติดต่อเปลี่ยนนัด" }
+  },
+  required: ["appointment_date", "appointment_time", "hospital"]
+};
+
+const APPT_PROMPT = `คุณกำลังดูภาพ "บัตรนัด/ใบนัดหมาย (Appointment Card)" จากโรงพยาบาลในประเทศไทย อาจมีหลายภาพ (เช่น ด้านหน้า-ด้านหลังของใบเดียวกัน)
+- ให้รวมข้อมูลจากทุกภาพเป็นนัดหมายเดียวกัน แล้วดึงข้อมูลออกมาเป็น JSON ตาม schema ที่กำหนด
+- ปีที่แสดงบนใบนัดไทยส่วนใหญ่เป็นปี พ.ศ. (พุทธศักราช) เช่น "69" หรือ "2569" ให้ลบ 543 แปลงเป็น ค.ศ. เองก่อนตอบ (2569 - 543 = 2026) ห้ามตอบเป็นปี พ.ศ. เด็ดขาด
+- appointment_type: เลือกจากรายการนี้เท่านั้นถ้ามั่นใจจริง ๆ ว่าตรงกับจุดประสงค์การนัด: ${JSON.stringify(APPOINTMENT_TYPES)} — ถ้าไม่มีอันไหนตรงหรือไม่มั่นใจ ให้เว้นว่างไว้ให้ผู้ใช้เลือกเอง ห้ามเดา
+- fasting_food / fasting_water: อ่านให้ละเอียด บางใบนัดเขียนแบบ "ดื่มน้ำเปล่าได้ งดอาหาร" ซึ่งหมายถึง fasting_food=true แต่ fasting_water=false (เพราะน้ำเปล่าดื่มได้ ไม่ต้องงด) อย่าสับสน
+- fasting_hours_before: ถ้าเอกสารระบุจำนวนชั่วโมงที่ต้องงดไว้ชัดเจน (เช่น "งดอาหาร 12 ชั่วโมงก่อนมาเจาะเลือด") ให้ใส่ตัวเลขนั้น ระบบจะคำนวณเวลาที่ต้องเริ่มงดเองจากตัวเลขนี้ร่วมกับวันเวลานัด ไม่ต้องคำนวณเวลาที่แน่นอนเอง แค่ดึงจำนวนชั่วโมงออกมาก็พอ
+- ห้ามเดาข้อมูลที่ไม่ปรากฏในภาพเด็ดขาด เว้นว่างไว้ดีกว่าเดา โดยเฉพาะเรื่องงดน้ำ/งดอาหารซึ่งมีผลต่อสุขภาพ
+ตอบกลับเป็น JSON เท่านั้น`;
+
+// ============================================================
+// Schema + Prompt: ฉลากยา (Medicine label)
+// ============================================================
+const MED_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    medicine_name: { type: "STRING", description: "ชื่อยาตามที่พิมพ์บนฉลาก (ภาษาอังกฤษหรือไทยตามที่เห็น) รวมรหัส/รุ่นถ้ามี เช่น 'diagest D6 tab'" },
+    strength: { type: "STRING", description: "ขนาดความแรงของยา เช่น '500 มก.' — ถ้าฉลากไม่ได้ระบุตัวเลขความแรงแยกไว้ (มีแต่ชื่อยากับจำนวนเม็ด) ให้เว้นว่าง" },
+    dosage: { type: "STRING", description: "วิธีใช้ต่อครั้ง เช่น 'รับประทานครั้งละ 1 เม็ด'" },
+    frequency: { type: "STRING", description: "ความถี่ในการใช้ เช่น 'วันละ 2 ครั้ง เช้า-เย็น'" },
+    before_after_meal: { type: "STRING", description: `เลือกจาก ${JSON.stringify(BEFORE_AFTER_MEAL_OPTIONS)} เท่านั้นถ้าฉลากระบุความสัมพันธ์กับมื้ออาหารชัดเจน (ก่อน/หลัง/พร้อมอาหาร) ถ้าฉลากบอกแค่ช่วงเวลาของวัน (เช่น เช้า-เย็น) โดยไม่ได้พูดถึงมื้ออาหาร ให้เว้นว่างไว้` },
+    quantity: { type: "NUMBER", description: "จำนวนเม็ด/หน่วยทั้งหมดที่จ่ายมา เช่น 20" },
+    start_date: { type: "STRING", description: "วันที่ที่ระบุบนฉลาก (วันที่จ่ายยา) แปลงเป็นรูปแบบ YYYY-MM-DD (ค.ศ.) — ถ้าเอกสารเขียนปี พ.ศ. ให้ลบ 543 ก่อนแปลง ถ้าเขียนเป็น ค.ศ. อยู่แล้วใช้ตรง ๆ ได้เลย" }
+  },
+  required: ["medicine_name"]
+};
+
+const MED_PROMPT = `คุณกำลังดูภาพ "ฉลากยา" ที่ติดอยู่บนซองยาจากโรงพยาบาล/ร้านขายยาในประเทศไทย อาจมีหลายภาพของฉลากเดียวกัน (มุมต่างกัน) ให้รวมเป็นรายการยาเดียวกัน แล้วดึงข้อมูลออกมาเป็น JSON ตาม schema ที่กำหนด
+- medicine_name: ใช้ชื่อยาตามที่พิมพ์บนฉลากเป๊ะ ๆ ไม่ต้องแปลหรือขยายความ
+- ปีบนฉลากอาจเป็น พ.ศ. หรือ ค.ศ. ก็ได้ขึ้นกับโรงพยาบาล ให้สังเกตบริบท (ปี พ.ศ. ของไทยตอนนี้อยู่ช่วง 2567-2570, ถ้าตัวเลขปีที่เห็นมากกว่า 2500 แสดงว่าเป็น พ.ศ. ให้ลบ 543 แปลงเป็น ค.ศ. ก่อนตอบเสมอ)
+- ห้ามเอาข้อความเกี่ยวกับ "อายุยาหลังเปิดใช้" (shelf life) มาใส่ผิดที่ผิดทางเป็นวันที่เริ่มใช้หรือวันหมดอายุการรักษาเด็ดขาด สองเรื่องนี้ไม่เหมือนกัน
+- ห้ามเดาข้อมูลที่ไม่ปรากฏในภาพเด็ดขาด เว้นว่างไว้ดีกว่าเดา
+ตอบกลับเป็น JSON เท่านั้น`;
+
+document.getElementById('readBtn').onclick = async () => {
+  const apiKey = apiKeyInput.value.trim();
+  if (!apiKey){ setStatus('<div class="error-box">กรุณาใส่ Gemini API Key ก่อน</div>'); return; }
+  if (files.length === 0){ setStatus('<div class="error-box">กรุณาเลือก/ถ่ายรูปอย่างน้อย 1 รูป</div>'); return; }
+
+  const btn = document.getElementById('readBtn');
+  btn.disabled = true;
+  setStatus('<div class="spinner"></div><div class="status">กำลังแปลงรูปและอ่านด้วย AI...</div>');
+
+  const schema = docType === 'medicine' ? MED_SCHEMA : APPT_SCHEMA;
+  const prompt = docType === 'medicine' ? MED_PROMPT : APPT_PROMPT;
+
+  try{
+    const parts = [{ text: prompt }];
+    for (const f of files){
+      const b64 = await fileToBase64(f);
+      parts.push({ inline_data: { mime_type: f.type || 'image/jpeg', data: b64 } });
+    }
+
+    // ลองไล่ทีละโมเดล เผื่อบางโมเดลถูกปลดระวาง/ไม่เปิดให้คีย์นี้ใช้
+    // (ถ้า Google ออกรุ่นใหม่กว่านี้ในอนาคต แก้/เพิ่มชื่อโมเดลในลิสต์นี้ได้เลย)
+    const MODEL_CANDIDATES = ['gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+
+    let data = null;
+    let lastErr = null;
+    for (const model of MODEL_CANDIDATES){
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      try{
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: schema
+            }
+          })
+        });
+        if (!res.ok){
+          const errText = await res.text();
+          lastErr = new Error(`[${model}] API error ${res.status}: ${errText.slice(0,200)}`);
+          continue; // ลองโมเดลถัดไป
+        }
+        data = await res.json();
+        break;
+      } catch(e){
+        lastErr = e;
+      }
+    }
+    if (!data) throw lastErr || new Error('ไม่สามารถเรียกโมเดลใดได้เลย');
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) throw new Error('AI ไม่ได้ส่งข้อมูลกลับมา ลองใหม่อีกครั้ง');
+
+    const parsed = JSON.parse(rawText);
+    if (docType === 'medicine') showMedReview(parsed); else showApptReview(parsed);
+    setStatus('<div class="status">✅ อ่านเสร็จแล้ว ตรวจสอบด้านล่างก่อนส่งกลับ (โดยเฉพาะเรื่องงดน้ำ/อาหารถ้าเป็นนัดหมาย)</div>');
+
+  } catch(err){
+    setStatus(`<div class="error-box">อ่านไม่สำเร็จ: ${err.message || err}<br>ลองตรวจสอบ API Key หรือรูปภาพ แล้วกด "อ่านด้วย AI" อีกครั้ง</div>`);
+  } finally{
+    btn.disabled = false;
+  }
+};
+
+function showApptReview(p){
+  document.getElementById('aHospital').value = p.hospital || '';
+  document.getElementById('aDept').value = p.department || '';
+  document.getElementById('aDoctor').value = p.doctor || '';
+  document.getElementById('aDate').value = p.appointment_date || '';
+  document.getElementById('aTime').value = p.appointment_time || '';
+  document.getElementById('aType').value = (p.appointment_type && APPOINTMENT_TYPES.includes(p.appointment_type)) ? p.appointment_type : '';
+  document.getElementById('aPurpose').value = p.purpose || '';
+  document.getElementById('aFastingInstruction').value = p.fasting_instruction || '';
+  document.getElementById('aNote').value = p.note || '';
+  setTriValue_('triFood', p.fasting_food === true ? true : (p.fasting_food === false ? false : null));
+  setTriValue_('triWater', p.fasting_water === true ? true : (p.fasting_water === false ? false : null));
+
+  // คำนวณเวลาที่ต้องเริ่มงด = วันเวลานัด - จำนวนชั่วโมงที่ AI อ่านได้ (ถ้ามีทั้งคู่)
+  document.getElementById('aFastingStart').value = '';
+  if (p.fasting_hours_before && p.appointment_date && p.appointment_time){
+    try{
+      const apptDt = new Date(p.appointment_date + 'T' + p.appointment_time + ':00');
+      if (!isNaN(apptDt.getTime())){
+        const startDt = new Date(apptDt.getTime() - Number(p.fasting_hours_before) * 3600000);
+        document.getElementById('aFastingStart').value = startDt.toISOString().slice(0, 16);
+      }
+    } catch(e){ /* เดี๋ยวผู้ใช้กรอกเองได้ในฟอร์มหลัก */ }
+  }
+
+  document.getElementById('reviewApptCard').style.display = 'block';
+  document.getElementById('reviewApptCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+function showMedReview(p){
+  document.getElementById('mName').value = p.medicine_name || '';
+  document.getElementById('mSource').value = 'โรงพยาบาล (ตามนัด/ใบสั่งแพทย์)';
+  document.getElementById('mPharmWrap').style.display = 'none';
+  document.getElementById('mStrength').value = p.strength || '';
+  document.getElementById('mDosage').value = p.dosage || '';
+  document.getElementById('mFreq').value = p.frequency || '';
+  document.getElementById('mMeal').value = (p.before_after_meal && BEFORE_AFTER_MEAL_OPTIONS.includes(p.before_after_meal)) ? p.before_after_meal : '';
+  document.getElementById('mQty').value = p.quantity || '';
+  document.getElementById('mStart').value = p.start_date || '';
+
+  document.getElementById('reviewMedCard').style.display = 'block';
+  document.getElementById('reviewMedCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+document.getElementById('confirmApptBtn').onclick = () => {
+  const hospital = document.getElementById('aHospital').value.trim();
+  const date = document.getElementById('aDate').value;
+  const time = document.getElementById('aTime').value;
+  if (!hospital || !date || !time){
+    setStatus('<div class="error-box">กรุณากรอกโรงพยาบาล วันที่ และเวลานัด ให้ครบก่อนส่งกลับ</div>');
+    return;
+  }
+  const payload = {
+    type: 'OCR_RESULT',
+    session: SESSION,
+    docType: 'appointment',
+    data: {
+      Hospital: hospital,
+      Department: document.getElementById('aDept').value.trim(),
+      Doctor: document.getElementById('aDoctor').value.trim(),
+      Date: date,
+      Time: time,
+      AppointmentType: document.getElementById('aType').value,
+      Purpose: document.getElementById('aPurpose').value.trim(),
+      FastingFood: triValue_('triFood'),
+      FastingWater: triValue_('triWater'),
+      FastingStart: document.getElementById('aFastingStart').value || null,
+      FastingInstruction: document.getElementById('aFastingInstruction').value.trim(),
+      Note: document.getElementById('aNote').value.trim()
+    }
+  };
+  sendResult_(payload);
+};
+
+document.getElementById('confirmMedBtn').onclick = () => {
+  const name = document.getElementById('mName').value.trim();
+  if (!name){
+    setStatus('<div class="error-box">กรุณากรอกชื่อยาก่อนส่งกลับ</div>');
+    return;
+  }
+  const payload = {
+    type: 'OCR_RESULT',
+    session: SESSION,
+    docType: 'medicine',
+    data: {
+      MedicineName: name,
+      Source: document.getElementById('mSource').value,
+      PharmacyName: document.getElementById('mPharmacy').value.trim(),
+      PharmacyPhone: document.getElementById('mPharmacyPhone').value.trim(),
+      Strength: document.getElementById('mStrength').value.trim(),
+      Dosage: document.getElementById('mDosage').value.trim(),
+      Frequency: document.getElementById('mFreq').value.trim(),
+      BeforeAfterMeal: document.getElementById('mMeal').value,
+      Quantity: document.getElementById('mQty').value ? Number(document.getElementById('mQty').value) : null,
+      StartDate: document.getElementById('mStart').value || null
+    }
+  };
+  sendResult_(payload);
+};
+
+function sendResult_(payload){
+  if (window.opener){
+    window.opener.postMessage(payload, '*');
+    setStatus('<div class="status">✅ ส่งข้อมูลกลับไปที่ฟอร์มแล้ว กำลังปิดหน้านี้...</div>');
+    setTimeout(() => window.close(), 700);
+  } else {
+    setStatus('<div class="error-box">ไม่พบหน้าต้นทาง (opener) กรุณาเปิดหน้านี้จากปุ่มในฟอร์มของแอปหลักเท่านั้น</div>');
+  }
+}
+</script>
+
+</body>
+</html>
