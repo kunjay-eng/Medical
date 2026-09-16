@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>อ่านใบนัด/ฉลากยาด้วย AI — Medical Manager</title>
 <style>
+  /* ธีม Smart & Calming Health (v2 theme) — เดิมเป็นโทนส้ม/ครีมของต้นแบบอื่น เปลี่ยนให้ตรงกับธีมหลักของแอป */
   :root{
-    --bg:#F7F3EE; --card:#FFFFFF; --line:#E6DFD6; --ink:#3A2E28; --ink-soft:#8A7E73;
-    --accent:#FF6B4A; --mint:#2FAE7A; --danger:#E5484D; --radius:14px;
+    --bg:#FAF8F5; --card:#FFFFFF; --line:#E8EEF0; --ink:#1E293B; --ink-soft:#64748B;
+    --accent:#14B8A6; --mint:#14B8A6; --danger:#F43F5E; --radius:16px;
   }
   *{box-sizing:border-box;}
+  html,body{ overscroll-behavior-y: contain; } /* กันดึงหน้าจอลงแล้วเบราว์เซอร์ auto-refresh ทั้งหน้า */
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     background:var(--bg); color:var(--ink); padding:16px; padding-bottom:80px;
@@ -39,7 +41,8 @@
   .btn-primary:disabled{opacity:.5; cursor:not-allowed;}
   .btn-ghost{background:var(--card); color:var(--ink); border:1.5px solid var(--line);}
   .btn-mint{background:var(--mint); color:#fff;}
-  #fileInput{display:none;}
+  .pick-row{display:flex; gap:8px;}
+  .pick-row .btn{width:auto; flex:1;}
   .thumbs{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
   .thumb{position:relative; width:76px; height:76px; border-radius:10px; overflow:hidden; border:1.5px solid var(--line);}
   .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
@@ -91,8 +94,15 @@
 
 <div class="card">
   <label>รูปภาพ</label>
-  <input type="file" id="fileInput" accept="image/*" capture="environment" multiple>
-  <button class="btn btn-ghost" id="pickBtn">➕ ถ่ายรูป / เลือกรูป (เลือกได้หลายรูป)</button>
+  <!-- แก้ไข: เดิมใช้ input เดียวที่มีทั้ง accept="image/*" และ capture="environment" พร้อมกัน
+       ซึ่งบนมือถือหลายรุ่น (โดยเฉพาะ iOS Safari) จะสั่งเปิดกล้องตรงทันที ไม่ขึ้นตัวเลือกให้เลือกรูปจากคลังภาพเลย
+       จึงแยกเป็น 2 input/2 ปุ่มชัดเจน: ปุ่มถ่ายรูป (มี capture) กับปุ่มเลือกจากคลัง (ไม่มี capture) -->
+  <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+  <input type="file" id="galleryInput" accept="image/*" multiple hidden>
+  <div class="pick-row">
+    <button class="btn btn-ghost" id="cameraBtn">📷 ถ่ายรูป</button>
+    <button class="btn btn-ghost" id="galleryBtn">🖼️ เลือกจากคลังภาพ</button>
+  </div>
   <div class="thumbs" id="thumbs"></div>
 </div>
 
@@ -221,12 +231,16 @@ apiKeyInput.addEventListener('input', () => localStorage.setItem('gemini_api_key
 
 let files = [];
 
-document.getElementById('pickBtn').onclick = () => document.getElementById('fileInput').click();
-document.getElementById('fileInput').onchange = (e) => {
+function handlePickedFiles_(e){
   files = files.concat(Array.from(e.target.files));
   renderThumbs();
-  e.target.value = '';
-};
+  e.target.value = ''; // เคลียร์ค่าเพื่อให้เลือกไฟล์เดิมซ้ำได้อีกครั้งถ้าต้องการ
+}
+
+document.getElementById('cameraBtn').onclick = () => document.getElementById('cameraInput').click();
+document.getElementById('galleryBtn').onclick = () => document.getElementById('galleryInput').click();
+document.getElementById('cameraInput').onchange = handlePickedFiles_;
+document.getElementById('galleryInput').onchange = handlePickedFiles_;
 
 function renderThumbs(){
   const wrap = document.getElementById('thumbs');
