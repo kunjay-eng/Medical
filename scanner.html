@@ -80,11 +80,18 @@
 
 </div>
 
+<!-- แก้ v1.60 (รายงานผู้ใช้: เปิดกล้องแล้วกดปุ่ม "🖼️ เลือกรูปภาพ" เพื่อสแกนจากรูปไม่ได้ — ตัวเลือกรูปภาพ
+     ของเครื่องไม่เด้งขึ้นมาเลย): เดิมซ่อน input ไฟล์นี้ด้วย attribute "hidden" (เท่ากับ display:none) แล้ว
+     สั่งเปิดด้วย qrFile.click() จาก JS — เบราว์เซอร์บางตัว โดยเฉพาะ iOS Safari/WebView บางเวอร์ชัน มีบั๊กที่
+     รู้จักกันดี: การเรียก .click() แบบสั่งจาก JS (ไม่ใช่คนแตะ input ตรง ๆ) กับ input ที่เป็น display:none จะไม่เปิด
+     ตัวเลือกไฟล์ให้เลย (เงียบ ๆ ไม่มี error ด้วย) ต่างจาก input ที่ซ่อนด้วยวิธีอื่น (เช่น opacity:0 + ขยับออกนอกจอ)
+     ที่ยังอยู่ใน layout จริง ซึ่งใช้ .click() ได้ปกติ — แก้โดยเอา "hidden" ออก แล้วซ่อนด้วย CSS คลาส
+     "visually-hidden-file" ใน scanner.css แทน (ดูคอมเมนต์ที่นั่น) -->
 <input
     type="file"
     id="qrFile"
-    accept="image/*"
-    hidden>
+    class="visually-hidden-file"
+    accept="image/*">
 
 <canvas id="canvas" hidden></canvas>
 

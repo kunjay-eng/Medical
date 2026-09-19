@@ -235,3 +235,25 @@ video{
     font-size:18px;
 
 }
+
+/* แก้ v1.60: ซ่อน input เลือกไฟล์รูปด้วยวิธีนี้แทน attribute "hidden" (display:none) — ยังอยู่ใน layout
+   จริง (แค่ขยับออกนอกจอ + โปร่งใส + ขนาด 1px) เพื่อให้ qrFile.click() ที่สั่งจาก JS เปิดตัวเลือกรูปภาพได้
+   แน่นอนทุกเบราว์เซอร์ รวมถึง iOS Safari/WebView บางเวอร์ชันที่ไม่ยอมเปิด file picker ให้ถ้า input เป็น
+   display:none ตอนถูกสั่ง .click() (ดูคอมเมนต์เต็มใน scanner.html) */
+.visually-hidden-file{
+
+    position:fixed;
+
+    top:-9999px;
+
+    left:-9999px;
+
+    width:1px;
+
+    height:1px;
+
+    opacity:0;
+
+    pointer-events:none;
+
+}

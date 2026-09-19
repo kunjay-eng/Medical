@@ -43,6 +43,9 @@
   .btn-mint{background:var(--mint); color:#fff;}
   .pick-row{display:flex; gap:8px;}
   .pick-row .btn{width:auto; flex:1;}
+  /* แก้ v1.60: ซ่อน input เลือกไฟล์รูปด้วยวิธีนี้แทน attribute "hidden" (display:none) — ดูเหตุผลเต็มที่
+     คอมเมนต์เหนือ input ทั้งสองด้านบน / scanner.css รอบแก้เดียวกัน */
+  .visually-hidden-file{position:fixed; top:-9999px; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;}
   .thumbs{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
   .thumb{position:relative; width:76px; height:76px; border-radius:10px; overflow:hidden; border:1.5px solid var(--line);}
   .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
@@ -97,8 +100,12 @@
   <!-- แก้ไข: เดิมใช้ input เดียวที่มีทั้ง accept="image/*" และ capture="environment" พร้อมกัน
        ซึ่งบนมือถือหลายรุ่น (โดยเฉพาะ iOS Safari) จะสั่งเปิดกล้องตรงทันที ไม่ขึ้นตัวเลือกให้เลือกรูปจากคลังภาพเลย
        จึงแยกเป็น 2 input/2 ปุ่มชัดเจน: ปุ่มถ่ายรูป (มี capture) กับปุ่มเลือกจากคลัง (ไม่มี capture) -->
-  <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-  <input type="file" id="galleryInput" accept="image/*" multiple hidden>
+  <!-- แก้ v1.60: เอา attribute "hidden" (display:none) ออก เปลี่ยนไปซ่อนด้วยคลาส "visually-hidden-file"
+       แทน (ดูคอมเมนต์เต็มที่ scanner.html/scanner.css รอบแก้เดียวกัน) — เบราว์เซอร์บางตัวไม่ยอมเปิดตัวเลือก
+       ไฟล์เมื่อสั่ง .click() จาก JS กับ input ที่เป็น display:none ทำให้ปุ่ม "ถ่ายรูป"/"เลือกจากคลังภาพ" กดแล้ว
+       ไม่มีอะไรเกิดขึ้นได้ในบางเครื่อง -->
+  <input type="file" id="cameraInput" accept="image/*" capture="environment" class="visually-hidden-file">
+  <input type="file" id="galleryInput" accept="image/*" multiple class="visually-hidden-file">
   <div class="pick-row">
     <button class="btn btn-ghost" id="cameraBtn">📷 ถ่ายรูป</button>
     <button class="btn btn-ghost" id="galleryBtn">🖼️ เลือกจากคลังภาพ</button>
