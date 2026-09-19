@@ -74,6 +74,16 @@ async function startCamera() {
 
     message.innerHTML = "กำลังเปิดกล้อง...";
 
+    // แก้ v1.59 (รายงานผู้ใช้: สแกน QR ฉลากยาในแอปไม่ติด แต่สแกนผ่านกล้องมือถือ (แอปกล้องเดิมของเครื่อง)
+    // ติดปกติ): เดิม getUserMedia() ขอกล้องแค่ facingMode อย่างเดียว ไม่ได้ระบุความละเอียดหรือโหมด
+    // โฟกัสเลย เบราว์เซอร์หลายตัว/เครื่องหลายรุ่นจึงเปิดกล้องมาที่ความละเอียดต่ำ (เช่น 640x480) และ
+    // ปล่อยโฟกัสไว้ที่โหมดปกติ (auto แบบยิงครั้งเดียว ไม่ใช่ continuous) — QR บนฉลากยาที่พิมพ์ออกมามีขนาด
+    // เล็ก ต้องถือกล้องเข้าใกล้ชัด ๆ ถึงจะอ่านออก พอความละเอียดต่ำ+โฟกัสไม่ปรับต่อเนื่องตอนถือใกล้ ภาพที่ได้
+    // จึงเบลอเกินกว่า jsQR/BarcodeDetector จะอ่านโมดูล QR ออก (ต่างจากแอปกล้องของเครื่องที่ใช้ความละเอียด
+    // เต็มเซนเซอร์ + โฟกัสต่อเนื่อง/มาโครอยู่แล้วโดยปริยาย) แก้โดย (1) ขอความละเอียดสูงขึ้นแบบ ideal (เบราว์เซอร์
+    // จะเลือกค่าที่ใกล้เคียงที่สุดที่กล้องรองรับให้เอง ไม่ทำให้เปิดกล้องพังถ้าเครื่องรองรับต่ำกว่า) และ (2) เปิด
+    // continuous autofocus บน track หลังได้ stream มาแล้ว (ถ้ากล้อง/เบราว์เซอร์รองรับ — ไม่รองรับก็แค่ข้ามเงียบ ๆ
+    // ไม่กระทบการทำงานอื่น)
     try {
 
         stream =
@@ -83,6 +93,14 @@ async function startCamera() {
 
                     facingMode: {
                         ideal: facingMode
+                    },
+
+                    width: {
+                        ideal: 1920
+                    },
+
+                    height: {
+                        ideal: 1080
                     }
 
                 },
@@ -104,6 +122,33 @@ async function startCamera() {
         );
 
         return;
+
+    }
+
+    try {
+
+        const track = stream.getVideoTracks()[0];
+
+        const caps =
+            track && track.getCapabilities
+                ? track.getCapabilities()
+                : {};
+
+        if (caps.focusMode &&
+            caps.focusMode.includes("continuous")) {
+
+            await track.applyConstraints({
+                advanced: [
+                    { focusMode: "continuous" }
+                ]
+            });
+
+        }
+
+    }
+    catch (e) {
+
+        console.log(e);
 
     }
 
