@@ -332,7 +332,23 @@ function sendResult(text) {
 // Scan QR from Image
 // ----------------------------
 
+// แก้ v1.61 (รายงานผู้ใช้: เลือกไฟล์รูปได้ปกติ แต่ไม่เกิดอะไรขึ้นเลย ไม่มีทั้งผลสแกนและข้อความ error ใด ๆ):
+// เดิมโค้ดส่วนนี้มี 2 จุดที่ทำให้ "เงียบ" แบบนี้ได้จริง —
+// 1) ไม่มี img.onerror เลย ถ้ารูปที่เลือกเปิด/ถอดรหัสไม่ได้ (ไฟล์เสีย หรือเป็นฟอร์แมตที่เบราว์เซอร์นั้นไม่รองรับ
+//    เช่น รูป .heic ที่กล้อง iPhone บันทึกเป็นค่าเริ่มต้น ซึ่งบางเบราว์เซอร์/บาง WebView ถอดรหัสในแท็ก <img>
+//    ไม่ได้) จะไม่มี event ไหนยิงเลยแม้แต่ event เดียว โค้ดเดิมเลยไม่มีทางรู้/แจ้งผู้ใช้ได้
+// 2) canvas.width/height หรือ ctx.getImageData() อาจ throw ได้จริงถ้ารูปมีความละเอียดสูงเกินขีดจำกัด canvas
+//    ของเบราว์เซอร์/เครื่องนั้น (พบได้กับรูปถ่ายจากมือถือรุ่นใหม่ที่ความละเอียดสูงมาก) แต่โค้ดเดิมไม่มี try/catch
+//    คลุมไว้ ทำให้ exception หลุดขึ้น console เฉย ๆ ไม่มีอะไรแสดงให้ผู้ใช้เห็นบนหน้าจอเลย
+// 3) qrFile ไม่เคยเคลียร์ค่าหลังเลือกไฟล์ ถ้าผู้ใช้เปิดตัวเลือกไฟล์ใหม่แล้วเลือก "ไฟล์เดิม" ซ้ำอีกครั้ง (เช่น
+//    ลองใหม่หลังครั้งแรกไม่เจอ QR) เบราว์เซอร์จะไม่ยิง event "change" ให้เลยเพราะค่า input ไม่ได้เปลี่ยน —
+//    ดูเหมือนกดเลือกไฟล์แล้ว "ไม่มีอะไรเกิดขึ้น" เหมือนกัน
+// แก้ทั้ง 3 จุด: เคลียร์ qrFile.value ก่อนเปิดตัวเลือกไฟล์ทุกครั้ง, เพิ่ม img.onerror + try/catch รอบการ
+// ประมวลผลรูป พร้อมข้อความแจ้งผู้ใช้ชัดเจนทุกเคส (ไม่ปล่อยให้เงียบอีกต่อไป) และขึ้นข้อความ "กำลังอ่าน..."
+// ทันทีที่เลือกไฟล์ เผื่อรูปใหญ่ใช้เวลาถอดรหัสสักครู่ ผู้ใช้จะได้รู้ว่าระบบกำลังทำงานอยู่ ไม่ใช่ค้าง
 imageBtn.onclick = function(){
+
+    qrFile.value = "";
 
     qrFile.click();
 
@@ -346,27 +362,21 @@ qrFile.onchange = function(e){
     if(!file)
         return;
 
+    message.innerHTML = "กำลังอ่าน QR จากรูป...";
 
     const img = new Image();
 
 
     img.onload = function(){
 
-        canvas.width = img.width;
-        canvas.height = img.height;
+        try {
+
+            canvas.width = img.width;
+            canvas.height = img.height;
 
 
-        ctx.drawImage(
-            img,
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
-
-
-        const imageData =
-            ctx.getImageData(
+            ctx.drawImage(
+                img,
                 0,
                 0,
                 canvas.width,
@@ -374,27 +384,58 @@ qrFile.onchange = function(e){
             );
 
 
-        const qr =
-            jsQR(
-                imageData.data,
-                imageData.width,
-                imageData.height
-            );
+            const imageData =
+                ctx.getImageData(
+                    0,
+                    0,
+                    canvas.width,
+                    canvas.height
+                );
+
+
+            const qr =
+                jsQR(
+                    imageData.data,
+                    imageData.width,
+                    imageData.height
+                );
+
+            if(qr && qr.data){
+
+                finish(qr.data);
+
+            }
+            else{
+
+                message.innerHTML =
+                "ไม่พบ QR Code ในรูป ลองเลือกรูปที่เห็น QR ชัด ๆ เต็ม ๆ ดูนะคะ";
+
+            }
+
+        }
+        catch(err){
+
+            console.log(err);
+
+            message.innerHTML =
+            "อ่านรูปนี้ไม่สำเร็จ (ไฟล์อาจใหญ่/ผิดปกติเกินไป) ลองเลือกรูปอื่นดูนะคะ";
+
+        }
+        finally{
+
+            URL.revokeObjectURL(img.src);
+
+        }
+
+    };
+
+
+    img.onerror = function(){
 
         URL.revokeObjectURL(img.src);
 
-        if(qr && qr.data){
-
-            finish(qr.data);
-
-        }
-        else{
-
-            message.innerHTML =
-            "ไม่พบ QR Code ในรูป";
-
-        }
-
+        message.innerHTML =
+        "เปิดไฟล์รูปนี้ไม่ได้ (ไฟล์อาจเสีย หรือเป็นไฟล์ประเภทที่เบราว์เซอร์นี้ไม่รองรับ เช่น .heic บางเครื่อง) ลองเลือกไฟล์ JPG/PNG อื่นดูนะคะ";
 
     };
 
