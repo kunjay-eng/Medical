@@ -160,6 +160,10 @@
   <label>ก่อน/หลังอาหาร</label>
   <select id="mMeal"><option value="">- ไม่ระบุ -</option></select>
   <div class="field-row"><div><label>จำนวน</label><input type="number" id="mQty"></div><div><label>วันที่เริ่มใช้</label><input type="date" id="mStart"></div></div>
+  <!-- เพิ่ม v1.54 (ตามที่ผู้ใช้ขอ): แสดงข้อความส่วนล่างของฉลาก (สรรพคุณ/วิธีเก็บรักษา/คำเตือน) ที่ AI
+       อ่านมาให้ตรวจสอบ/แก้ไขก่อนส่งเข้าฟิลด์ "หมายเหตุ" ของยา (เพิ่มฟิลด์นี้ตั้งแต่ v1.52) — ใช้ textarea
+       รักษาการขึ้นบรรทัดใหม่ตามที่ AI แยกมาให้ (แต่ละบรรทัดตามที่ปรากฏจริงบนฉลาก) -->
+  <label>📝 หมายเหตุ (สรรพคุณ/วิธีเก็บรักษา/คำเตือน จากฉลาก)</label><textarea id="mNote" placeholder="เช่น ยาลดระดับไขมันในเลือด&#10;เก็บยานี้พ้นแสง&#10;หากปวดกล้ามเนื้อโดยไม่ทราบสาเหตุ ให้มาพบแพทย์"></textarea>
 
   <button class="btn btn-mint" id="confirmMedBtn" style="margin-top:18px;">✔ ยืนยัน ส่งกลับไปกรอกฟอร์มยา</button>
 </div>
@@ -311,7 +315,10 @@ const MED_SCHEMA = {
     frequency: { type: "STRING", description: "ความถี่ในการใช้ เช่น 'วันละ 2 ครั้ง เช้า-เย็น'" },
     before_after_meal: { type: "STRING", description: `เลือกจาก ${JSON.stringify(BEFORE_AFTER_MEAL_OPTIONS)} เท่านั้นถ้าฉลากระบุความสัมพันธ์กับมื้ออาหารชัดเจน (ก่อน/หลัง/พร้อมอาหาร) ถ้าฉลากบอกแค่ช่วงเวลาของวัน (เช่น เช้า-เย็น) โดยไม่ได้พูดถึงมื้ออาหาร ให้เว้นว่างไว้` },
     quantity: { type: "NUMBER", description: "จำนวนเม็ด/หน่วยทั้งหมดที่จ่ายมา เช่น 20" },
-    start_date: { type: "STRING", description: "วันที่ที่ระบุบนฉลาก (วันที่จ่ายยา) แปลงเป็นรูปแบบ YYYY-MM-DD (ค.ศ.) — ถ้าเอกสารเขียนปี พ.ศ. ให้ลบ 543 ก่อนแปลง ถ้าเขียนเป็น ค.ศ. อยู่แล้วใช้ตรง ๆ ได้เลย" }
+    start_date: { type: "STRING", description: "วันที่ที่ระบุบนฉลาก (วันที่จ่ายยา) แปลงเป็นรูปแบบ YYYY-MM-DD (ค.ศ.) — ถ้าเอกสารเขียนปี พ.ศ. ให้ลบ 543 ก่อนแปลง ถ้าเขียนเป็น ค.ศ. อยู่แล้วใช้ตรง ๆ ได้เลย" },
+    // เพิ่ม v1.54 (ตามที่ผู้ใช้ขอ): ข้อความส่วนล่างของฉลากยา — สรรพคุณ/คำเตือน/วิธีเก็บรักษา เช่น
+    // "ยาลดระดับไขมันในเลือด", "เก็บยานี้พ้นแสง", "หากปวดกล้ามเนื้อโดยไม่ทราบสาเหตุ ให้มาพบแพทย์"
+    note: { type: "STRING", description: "ข้อความส่วนล่างของฉลากที่ไม่ใช่วิธีใช้/ความถี่/ก่อน-หลังอาหาร เช่น สรรพคุณของยา (เช่น 'ยาลดระดับไขมันในเลือด'), คำแนะนำการเก็บรักษา (เช่น 'เก็บยานี้พ้นแสง'), คำเตือน/อาการที่ต้องพบแพทย์ (เช่น 'หากปวดกล้ามเนื้อโดยไม่ทราบสาเหตุ ให้มาพบแพทย์') — ให้แยกแต่ละประโยค/แต่ละบรรทัดที่ขึ้นบรรทัดใหม่บนฉลากจริงด้วยเครื่องหมายขึ้นบรรทัดใหม่ (\\n) ตามที่ปรากฏบนฉลาก ไม่ต้องรวมเป็นย่อหน้าเดียว ถ้าฉลากไม่มีข้อความส่วนนี้ให้เว้นว่าง" }
   },
   required: ["medicine_name"]
 };
@@ -320,6 +327,11 @@ const MED_PROMPT = `คุณกำลังดูภาพ "ฉลากยา"
 - medicine_name: ใช้ชื่อยาตามที่พิมพ์บนฉลากเป๊ะ ๆ ไม่ต้องแปลหรือขยายความ
 - ปีบนฉลากอาจเป็น พ.ศ. หรือ ค.ศ. ก็ได้ขึ้นกับโรงพยาบาล ให้สังเกตบริบท (ปี พ.ศ. ของไทยตอนนี้อยู่ช่วง 2567-2570, ถ้าตัวเลขปีที่เห็นมากกว่า 2500 แสดงว่าเป็น พ.ศ. ให้ลบ 543 แปลงเป็น ค.ศ. ก่อนตอบเสมอ)
 - ห้ามเอาข้อความเกี่ยวกับ "อายุยาหลังเปิดใช้" (shelf life) มาใส่ผิดที่ผิดทางเป็นวันที่เริ่มใช้หรือวันหมดอายุการรักษาเด็ดขาด สองเรื่องนี้ไม่เหมือนกัน
+- เพิ่ม v1.54 (ตามที่ผู้ใช้ขอ): ฉลากยาส่วนล่างมักมีข้อความเพิ่มเติมนอกเหนือจากวิธีใช้ เช่น สรรพคุณของยา
+  (ตัวอย่าง "ยาลดระดับไขมันในเลือด"), วิธีเก็บรักษา (ตัวอย่าง "เก็บยานี้พ้นแสง"), และคำเตือน/อาการที่ต้อง
+  พบแพทย์ (ตัวอย่าง "หากปวดกล้ามเนื้อโดยไม่ทราบสาเหตุ ให้มาพบแพทย์") ให้ดึงข้อความช่วงนี้ทั้งหมดมาใส่ใน
+  "note" โดยแยกแต่ละบรรทัดตามที่ขึ้นบรรทัดใหม่จริงบนฉลาก (คั่นด้วย \\n) ห้ามรวมทุกอย่างเป็นประโยคเดียวยาว ๆ
+  และห้ามเอาวิธีใช้/ความถี่/ก่อน-หลังอาหาร (ที่ใส่ใน dosage/frequency/before_after_meal ไปแล้ว) มาใส่ซ้ำใน note
 - ห้ามเดาข้อมูลที่ไม่ปรากฏในภาพเด็ดขาด เว้นว่างไว้ดีกว่าเดา
 ตอบกลับเป็น JSON เท่านั้น`;
 
@@ -427,6 +439,7 @@ function showMedReview(p){
   document.getElementById('mMeal').value = (p.before_after_meal && BEFORE_AFTER_MEAL_OPTIONS.includes(p.before_after_meal)) ? p.before_after_meal : '';
   document.getElementById('mQty').value = p.quantity || '';
   document.getElementById('mStart').value = p.start_date || '';
+  document.getElementById('mNote').value = p.note || ''; // เพิ่ม v1.54
 
   document.getElementById('reviewMedCard').style.display = 'block';
   document.getElementById('reviewMedCard').scrollIntoView({ behavior: 'smooth' });
@@ -482,7 +495,8 @@ document.getElementById('confirmMedBtn').onclick = () => {
       Frequency: document.getElementById('mFreq').value.trim(),
       BeforeAfterMeal: document.getElementById('mMeal').value,
       Quantity: document.getElementById('mQty').value ? Number(document.getElementById('mQty').value) : null,
-      StartDate: document.getElementById('mStart').value || null
+      StartDate: document.getElementById('mStart').value || null,
+      Note: document.getElementById('mNote').value.trim() // เพิ่ม v1.54
     }
   };
   sendResult_(payload);
