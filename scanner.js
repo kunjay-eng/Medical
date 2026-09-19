@@ -12,7 +12,7 @@
 // ต่อ ๆ ไปที่แก้ไฟล์นี้แค่แก้เลขนี้ที่จุดเดียว ไม่ต้องไล่แก้ทุกข้อความ พร้อมเพิ่ม "?v=" ต่อท้าย URL ของไฟล์นี้
 // และ scanner.css ใน scanner.html (ดูคอมเมนต์ที่นั่น) เพื่อบังคับให้เบราว์เซอร์/แคชของ GitHub Pages ดึงไฟล์
 // ใหม่จริง ๆ ทุกครั้งที่เลขเวอร์ชันเปลี่ยน แทนที่จะใช้ไฟล์เก่าที่แคชไว้
-const SCANNER_VERSION = "1.63";
+const SCANNER_VERSION = "1.64";
 
 function withVer_(text) {
     return text + " (scanner.js v" + SCANNER_VERSION + ")";

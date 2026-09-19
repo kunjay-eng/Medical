@@ -12,12 +12,22 @@
      — เหตุผล: ผู้ใช้แจ้งว่าอัปโหลดไฟล์แก้ล่าสุดขึ้น GitHub Pages แล้วแต่ยังเจอ error ข้อความเดิมอยู่ สาเหตุที่พบ
      บ่อยที่สุดของอาการแบบนี้คือเบราว์เซอร์ (หรือแคชของ GitHub Pages/CDN เอง) ยังเก็บไฟล์ .css/.js เวอร์ชันเก่า
      ไว้อยู่ ไม่ยอมโหลดไฟล์ใหม่ให้ทั้งที่เนื้อไฟล์บนเซิร์ฟเวอร์อัปเดตแล้วจริง — การเติม query string ต่อท้าย URL
-     (เช่น scanner.js?v=1.63) ทำให้เบราว์เซอร์มองว่าเป็นคนละ URL กับที่แคชไว้ จึงบังคับให้ดึงไฟล์ใหม่จริง ๆ ทุก
+     (เช่น scanner.js?v=1.64) ทำให้เบราว์เซอร์มองว่าเป็นคนละ URL กับที่แคชไว้ จึงบังคับให้ดึงไฟล์ใหม่จริง ๆ ทุก
      ครั้งที่เลขเวอร์ชันเปลี่ยน ครั้งต่อ ๆ ไปที่แก้ scanner.css/scanner.js อย่าลืมขยับเลขนี้ให้ตรงกับ SCANNER_VERSION
      ใน scanner.js ด้วยเสมอ -->
-<link rel="stylesheet" href="scanner.css?v=1.63">
+<link rel="stylesheet" href="scanner.css?v=1.64">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<!-- แก้ v1.64 (รายงานผู้ใช้: สแกนจากรูปภาพขึ้น error "ReferenceError jsQR is not defined" — คือไลบรารี jsQR
+     ไม่ถูกโหลดขึ้นมาเลย): เช็คแล้วพบว่า URL เดิม https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js
+     ไม่มีไฟล์นี้อยู่จริงบน cdnjs (จริง ๆ แล้ว jsQR ไม่ได้ถูกโฮสต์ไว้บน cdnjs เลย) คำขอโหลดสคริปต์นี้จึงล้มเหลว
+     (404) แบบเงียบ ๆ ตัวแปร jsQR เลยไม่ถูกประกาศ — เรื่องนี้เป็นบั๊กที่ซ่อนอยู่มาตั้งแต่ v1.12 ที่เพิ่มระบบสแกน
+     เข้ามา แต่ไม่เคยเจอมาก่อนเพราะมือถือ/เบราว์เซอร์ส่วนใหญ่รองรับ BarcodeDetector ของตัวเครื่องเอง (ดู
+     initDetector() ใน scanner.js) จึงไม่เคยต้องพึ่ง jsQR ตอนสแกนจากกล้องสด มาเจอตอนนี้เพราะฟีเจอร์ "สแกนจาก
+     รูปภาพ" เรียกใช้ jsQR ตรง ๆ เสมอไม่ว่าเบราว์เซอร์จะรองรับ BarcodeDetector หรือไม่ก็ตาม — แก้โดยเปลี่ยนไป
+     โหลดจาก jsDelivr แทน (https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js) ซึ่งเป็น CDN ที่ดึงตรง
+     จากแพ็กเกจ npm ของ jsQR เอง ยืนยันแล้วว่ามีไฟล์นี้จริงและ export ตัวแปรชื่อ jsQR แบบเดียวกัน ไม่ต้องแก้
+     โค้ดส่วนอื่นเลย -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
 
 </head>
@@ -111,7 +121,7 @@ const SESSION =
 
 </script>
 
-<script src="scanner.js?v=1.63"></script>
+<script src="scanner.js?v=1.64"></script>
 
 </body>
 </html>
