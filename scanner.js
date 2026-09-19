@@ -4,6 +4,20 @@
 // (SESSION มาจาก scanner.html — window.opener.postMessage กลับไปที่ Client.html)
 // =============================
 
+// แก้ v1.63 (ตามที่ผู้ใช้ขอ): ผู้ใช้แจ้งว่าอัปโหลดไฟล์แก้ล่าสุดขึ้น GitHub Pages แล้วแต่ยังเจอ error
+// ข้อความเดิมอยู่ (สาเหตุที่พบบ่อยที่สุดคือเบราว์เซอร์/แคชของ GitHub Pages ยังส่งไฟล์เวอร์ชันเก่าอยู่ ไม่ใช่
+// ว่าโค้ดใหม่ใช้ไม่ได้ผล) — เพิ่มเลขเวอร์ชันของไฟล์นี้ต่อท้ายข้อความแจ้งเตือน/alert ทุกจุดที่ผู้ใช้เห็น เพื่อให้
+// เช็คได้เองทันทีว่าเบราว์เซอร์กำลังรันไฟล์ scanner.js เวอร์ชันไหนอยู่จริง ๆ (ถ้าเห็นเลขเวอร์ชันเก่ากว่าที่ควร
+// แปลว่ายังโดนแคชอยู่ ให้ลอง hard refresh / เปิดในโหมดไม่ระบุตัวตน) — ตั้งใจให้เป็นค่าคงที่ตัวเดียวตรงนี้ ครั้ง
+// ต่อ ๆ ไปที่แก้ไฟล์นี้แค่แก้เลขนี้ที่จุดเดียว ไม่ต้องไล่แก้ทุกข้อความ พร้อมเพิ่ม "?v=" ต่อท้าย URL ของไฟล์นี้
+// และ scanner.css ใน scanner.html (ดูคอมเมนต์ที่นั่น) เพื่อบังคับให้เบราว์เซอร์/แคชของ GitHub Pages ดึงไฟล์
+// ใหม่จริง ๆ ทุกครั้งที่เลขเวอร์ชันเปลี่ยน แทนที่จะใช้ไฟล์เก่าที่แคชไว้
+const SCANNER_VERSION = "1.63";
+
+function withVer_(text) {
+    return text + " (scanner.js v" + SCANNER_VERSION + ")";
+}
+
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -72,7 +86,7 @@ async function startCamera() {
 
     loading.style.display = "flex";
 
-    message.innerHTML = "กำลังเปิดกล้อง...";
+    message.innerHTML = withVer_("กำลังเปิดกล้อง...");
 
     // แก้ v1.59 (รายงานผู้ใช้: สแกน QR ฉลากยาในแอปไม่ติด แต่สแกนผ่านกล้องมือถือ (แอปกล้องเดิมของเครื่อง)
     // ติดปกติ): เดิม getUserMedia() ขอกล้องแค่ facingMode อย่างเดียว ไม่ได้ระบุความละเอียดหรือโหมด
@@ -115,7 +129,8 @@ async function startCamera() {
         loading.style.display = "none";
 
         alert(
-            "เปิดกล้องไม่สำเร็จ\n\n" +
+            withVer_("เปิดกล้องไม่สำเร็จ") +
+            "\n\n" +
             e.name +
             "\n" +
             e.message
@@ -362,7 +377,7 @@ qrFile.onchange = function(e){
     if(!file)
         return;
 
-    message.innerHTML = "กำลังอ่าน QR จากรูป...";
+    message.innerHTML = withVer_("กำลังอ่าน QR จากรูป...");
 
     const img = new Image();
 
@@ -426,7 +441,7 @@ qrFile.onchange = function(e){
             else{
 
                 message.innerHTML =
-                "ไม่พบ QR Code ในรูป ลองเลือกรูปที่เห็น QR ชัด ๆ เต็ม ๆ ดูนะคะ";
+                withVer_("ไม่พบ QR Code ในรูป ลองเลือกรูปที่เห็น QR ชัด ๆ เต็ม ๆ ดูนะคะ");
 
             }
 
@@ -435,8 +450,13 @@ qrFile.onchange = function(e){
 
             console.log(err);
 
+            // แก้ v1.63: ต่อท้ายชื่อ/ข้อความ error จริงจาก browser เข้าไปในข้อความที่ผู้ใช้เห็นด้วย (เดิม
+            // ซ่อนไว้แค่ใน console.log ที่ผู้ใช้ทั่วไปเปิดดูเองไม่ได้) เผื่อ resize ภาพลงแล้วยังพังอยู่ จะได้รู้
+            // สาเหตุจริงจากชื่อ error (เช่น RangeError, SecurityError ฯลฯ) ไปแจ้งต่อได้ทันทีโดยไม่ต้องเปิด
+            // developer console
             message.innerHTML =
-            "อ่านรูปนี้ไม่สำเร็จ (ไฟล์อาจใหญ่/ผิดปกติเกินไป) ลองเลือกรูปอื่นดูนะคะ";
+            withVer_("อ่านรูปนี้ไม่สำเร็จ (ไฟล์อาจใหญ่/ผิดปกติเกินไป) ลองเลือกรูปอื่นดูนะคะ") +
+            "<br><small>" + (err && err.name ? err.name : "") + " " + (err && err.message ? err.message : "") + "</small>";
 
         }
         finally{
@@ -453,7 +473,7 @@ qrFile.onchange = function(e){
         URL.revokeObjectURL(img.src);
 
         message.innerHTML =
-        "เปิดไฟล์รูปนี้ไม่ได้ (ไฟล์อาจเสีย หรือเป็นไฟล์ประเภทที่เบราว์เซอร์นี้ไม่รองรับ เช่น .heic บางเครื่อง) ลองเลือกไฟล์ JPG/PNG อื่นดูนะคะ";
+        withVer_("เปิดไฟล์รูปนี้ไม่ได้ (ไฟล์อาจเสีย หรือเป็นไฟล์ประเภทที่เบราว์เซอร์นี้ไม่รองรับ เช่น .heic บางเครื่อง) ลองเลือกไฟล์ JPG/PNG อื่นดูนะคะ");
 
     };
 
@@ -498,7 +518,7 @@ flashBtn.onclick = async function () {
 
     if (!cap.torch) {
 
-        alert("เครื่องนี้ไม่รองรับไฟฉาย");
+        alert(withVer_("เครื่องนี้ไม่รองรับไฟฉาย"));
 
         return;
 

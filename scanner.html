@@ -8,7 +8,14 @@
 
 <title>Scan QR — Medical Manager</title>
 
-<link rel="stylesheet" href="scanner.css">
+<!-- แก้ v1.63 (ตามที่ผู้ใช้ขอ): ต่อ "?v=" ท้าย URL ของ scanner.css/scanner.js ให้ตรงกับเลขเวอร์ชันไฟล์เสมอ
+     — เหตุผล: ผู้ใช้แจ้งว่าอัปโหลดไฟล์แก้ล่าสุดขึ้น GitHub Pages แล้วแต่ยังเจอ error ข้อความเดิมอยู่ สาเหตุที่พบ
+     บ่อยที่สุดของอาการแบบนี้คือเบราว์เซอร์ (หรือแคชของ GitHub Pages/CDN เอง) ยังเก็บไฟล์ .css/.js เวอร์ชันเก่า
+     ไว้อยู่ ไม่ยอมโหลดไฟล์ใหม่ให้ทั้งที่เนื้อไฟล์บนเซิร์ฟเวอร์อัปเดตแล้วจริง — การเติม query string ต่อท้าย URL
+     (เช่น scanner.js?v=1.63) ทำให้เบราว์เซอร์มองว่าเป็นคนละ URL กับที่แคชไว้ จึงบังคับให้ดึงไฟล์ใหม่จริง ๆ ทุก
+     ครั้งที่เลขเวอร์ชันเปลี่ยน ครั้งต่อ ๆ ไปที่แก้ scanner.css/scanner.js อย่าลืมขยับเลขนี้ให้ตรงกับ SCANNER_VERSION
+     ใน scanner.js ด้วยเสมอ -->
+<link rel="stylesheet" href="scanner.css?v=1.63">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 
@@ -104,7 +111,7 @@ const SESSION =
 
 </script>
 
-<script src="scanner.js"></script>
+<script src="scanner.js?v=1.63"></script>
 
 </body>
 </html>
