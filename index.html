@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<title>Medical Manager</title>
+
+<!-- ============================================================
+     เพิ่ม v1.82 (ตามที่ผู้ใช้ขอ — "ทำ fav แบบมี icon หน้าจอ โดยใช้ github เป็นตัวครอบ เพราะ apps script
+     ไม่ support"): หน้านี้คือ "เปลือก" (wrapper/shell) ที่ทำหน้าที่แค่ 2 อย่าง
+       1) ประกาศ favicon / apple-touch-icon / manifest.json ให้ครบ เพื่อให้ตอนกด "เพิ่มลงหน้าจอโฮม"
+          (Add to Home Screen) จากมือถือ ได้ไอคอนแอปจริงแทนไอคอนเว็บทั่วไป/ตัวอักษรย่อ
+       2) ครอบเว็บแอปตัวจริงจาก Apps Script (Client.html) ไว้ในนี้ด้วย <iframe> เต็มจอ ไม่มี URL bar/
+          แถบเบราว์เซอร์ ให้ความรู้สึกเหมือนเป็นแอปจริง (standalone) — ทำแบบนี้เพราะ Apps Script Web App
+          เอง "ไม่ support" การตั้งค่า favicon/manifest ให้ตัวเอง (มัน serve ผ่านโดเมนของ Google เอง
+          ควบคุม header พวกนี้ไม่ได้) จึงต้องมี GitHub Pages มาเป็นตัวครอบแทน — ไม่กระทบระบบ auth/PIN
+          เดิมของ Apps Script เลย เพราะ iframe ก็แค่โหลด URL เดิมของเว็บแอปตรง ๆ (Code.gs ฝั่ง doGet ก็
+          เปิด setXFrameOptionsMode(ALLOWALL) รองรับการถูกครอบด้วย iframe จากคนละโดเมนไว้อยู่แล้วตั้งแต่
+          เดิม — ดูเหตุผลเดียวกับที่ทำให้พิมพ์ QR ใบนัดได้)
+     ============================================================ -->
+
+<!-- แก้ v1.82: favicon หลายขนาด (เบราว์เซอร์เลือกขนาดที่เหมาะเอง) -->
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=1">
+<link rel="shortcut icon" href="favicon.ico?v=1">
+
+<!-- ไอคอนตอนกด "เพิ่มลงหน้าจอโฮม" บน iOS (Safari ไม่อ่าน manifest.json จึงต้องมี tag นี้แยกต่างหาก) -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Medical Manager">
+
+<!-- Android/Chrome: อ่านไอคอน+ชื่อ+สีธีมจาก manifest.json (ดูไฟล์ manifest.json ในโฟลเดอร์เดียวกัน) -->
+<link rel="manifest" href="manifest.json?v=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2563EB">
+
+<style>
+  :root {
+    color-scheme: light;
+  }
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: #F5F8FC;
+    font-family: 'Prompt', 'Segoe UI', 'Noto Sans Thai', sans-serif;
+    overscroll-behavior: none;
+  }
+  /* กันเนื้อหาโดนบังด้วยรอยบาก/แถบระบบเวลาเปิดแบบ standalone เต็มจอ */
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  #appFrame {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    left: 0;
+    right: 0;
+    bottom: env(safe-area-inset-bottom, 0px);
+    width: 100%;
+    height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    border: 0;
+    display: none;
+    background: #F5F8FC;
+  }
+  #loadingBox {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px;
+  }
+  #loadingBox .spinner {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 4px solid #DCE6F5; border-top-color: #2563EB;
+    animation: spin 0.8s linear infinite;
+  }
+  #loadingBox .txt { color: #64748B; font-size: 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* กล่องคำแนะนำตอนยังไม่ตั้งค่า APP_WEBAPP_URL (ดูสคริปต์ด้านล่าง) */
+  #setupBox {
+    position: fixed; inset: 0; display: none;
+    align-items: center; justify-content: center; padding: 24px; box-sizing: border-box;
+  }
+  #setupBox .card {
+    max-width: 440px; background: #fff; border-radius: 18px; padding: 22px 20px;
+    box-shadow: 0 8px 28px rgba(30,41,59,0.10); color: #1E293B; line-height: 1.6; font-size: 14px;
+  }
+  #setupBox h1 { font-size: 17px; margin: 0 0 10px; }
+  #setupBox code {
+    display: block; background: #F1F5F9; border-radius: 8px; padding: 8px 10px;
+    font-size: 12.5px; margin: 8px 0; word-break: break-all;
+  }
+</style>
+
+</head>
+<body>
+
+<!-- ============================================================
+     ตั้งค่าตรงนี้ที่เดียว: วาง "Web app URL" ของ Apps Script (ต้องลงท้ายด้วย /exec ไม่ใช่ /dev)
+     — ใช้ URL เดียวกับที่กรอกไว้ใน GithubConfig.html -> window.WEBAPP_URL_OVERRIDE ของโปรเจกต์นี้ได้เลย
+     เช่น 'https://script.google.com/macros/s/AKfycb.../exec'
+     ============================================================ -->
+<script>
+  var APP_WEBAPP_URL = '';
+</script>
+
+<div id="loadingBox">
+  <div class="spinner"></div>
+  <div class="txt">กำลังเปิด Medical Manager...</div>
+</div>
+
+<div id="setupBox">
+  <div class="card">
+    <h1>⚙️ ยังไม่ได้ตั้งค่า URL ของเว็บแอป</h1>
+    เปิดไฟล์ <code>github-pages/index.html</code> แล้วแก้บรรทัด
+    <code>var APP_WEBAPP_URL = '';</code>
+    ให้เป็น "Web app URL" จริงจาก Apps Script (Deploy → Manage deployments ต้องลงท้ายด้วย <code>/exec</code>)
+    แล้วอัปโหลดไฟล์นี้กลับขึ้น GitHub Pages อีกครั้ง — ดูขั้นตอนเต็ม ๆ ใน
+    <code>doc/21-home-screen-icon-setup-guide.md</code>
+  </div>
+</div>
+
+<iframe id="appFrame" title="Medical Manager" allow="camera; clipboard-write"></iframe>
+
+<script>
+  (function () {
+    var url = (APP_WEBAPP_URL || '').trim();
+    var loadingBox = document.getElementById('loadingBox');
+    var setupBox = document.getElementById('setupBox');
+    var frame = document.getElementById('appFrame');
+
+    if (!url) {
+      loadingBox.style.display = 'none';
+      setupBox.style.display = 'flex';
+      return;
+    }
+
+    frame.addEventListener('load', function () {
+      loadingBox.style.display = 'none';
+      frame.style.display = 'block';
+    });
+
+    frame.src = url;
+  })();
+</script>
+
+</body>
+</html>
