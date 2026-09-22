@@ -1,17 +1,24 @@
 {
-  "name": "Medical Manager",
+  "name": "MedManager",
   "short_name": "MedManager",
-  "description": "ผู้ช่วยจัดการนัดหมายแพทย์และยาประจำวัน",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#F5F8FC",
-  "theme_color": "#2563EB",
-  "lang": "th",
+  "background_color": "#eaf3fb",
+  "theme_color": "#eaf3fb",
   "icons": [
-    { "src": "icon-192.png?v=2", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png?v=2", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512-maskable.png?v=2", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
