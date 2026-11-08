@@ -275,6 +275,34 @@ function fileToBase64(file){
   });
 }
 
+// เพิ่ม v1.143: ย่อรูปให้ด้านยาวสุดไม่เกิน 1600px แล้วบีบเป็น JPEG คุณภาพ 0.85 (ตัวหนังสือบนฉลากยังอ่านชัด
+// แต่ไฟล์เหลือประมาณ 200-500 KB) — ถ้าย่อไม่ได้ (เช่น ไฟล์ HEIC บางเครื่อง) ใช้ไฟล์ต้นฉบับแทน
+async function compressImage_(file){
+  const MAX = 1600;
+  try{
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('decode'));
+      im.src = url;
+    });
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX / Math.max(w, h));
+    w = Math.round(w * scale); h = Math.round(h * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    return { mime: 'image/jpeg', b64: dataUrl.split(',')[1] };
+  } catch(e){
+    return { mime: file.type || 'image/jpeg', b64: await fileToBase64(file) };
+  }
+}
+
 function setStatus(html){
   document.getElementById('statusArea').innerHTML = html;
 }
@@ -355,44 +383,67 @@ document.getElementById('readBtn').onclick = async () => {
   const prompt = docType === 'medicine' ? MED_PROMPT : APPT_PROMPT;
 
   try{
+    // แก้ v1.143: ย่อ/บีบอัดรูปก่อนส่ง — รูปจากกล้องมือถือใหญ่ 3-10 MB พอแปลงเป็น base64 แล้วโตขึ้นอีก ~33%
+    // ทำให้อัปโหลดช้า/หลุดกลางทาง เบราว์เซอร์รายงานเป็น "Failed to fetch" (ไม่ใช่ปัญหา API Key)
     const parts = [{ text: prompt }];
-    for (const f of files){
-      const b64 = await fileToBase64(f);
-      parts.push({ inline_data: { mime_type: f.type || 'image/jpeg', data: b64 } });
+    for (let i = 0; i < files.length; i++){
+      setStatus(`<div class="spinner"></div><div class="status">กำลังย่อรูป ${i + 1}/${files.length}...</div>`);
+      const img = await compressImage_(files[i]);
+      parts.push({ inline_data: { mime_type: img.mime, data: img.b64 } });
     }
+    setStatus('<div class="spinner"></div><div class="status">กำลังส่งให้ AI อ่าน (ใช้เวลาประมาณ 5-30 วินาที)...</div>');
 
-    // ลองไล่ทีละโมเดล เผื่อบางโมเดลถูกปลดระวาง/ไม่เปิดให้คีย์นี้ใช้
+    // ลองไล่ทีละโมเดล เฉพาะกรณีโมเดลนั้นใช้ไม่ได้ (404/429/5xx)
     // (ถ้า Google ออกรุ่นใหม่กว่านี้ในอนาคต แก้/เพิ่มชื่อโมเดลในลิสต์นี้ได้เลย)
     const MODEL_CANDIDATES = ['gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+    const reqBody = JSON.stringify({
+      contents: [{ role: 'user', parts }],
+      generationConfig: { responseMimeType: 'application/json', responseSchema: schema }
+    });
 
     let data = null;
     let lastErr = null;
+    modelLoop:
     for (const model of MODEL_CANDIDATES){
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      try{
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              responseSchema: schema
-            }
-          })
-        });
-        if (!res.ok){
+      // network error / timeout → ลองซ้ำโมเดลเดิมอีก 1 ครั้ง (เน็ตมือถือสะดุดชั่วคราวเป็นเรื่องปกติ)
+      for (let attempt = 1; attempt <= 2; attempt++){
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 60000);
+        try{
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+            body: reqBody,
+            signal: ctrl.signal
+          });
+          clearTimeout(timer);
+          if (res.ok){ data = await res.json(); break modelLoop; }
           const errText = await res.text();
           lastErr = new Error(`[${model}] API error ${res.status}: ${errText.slice(0,200)}`);
-          continue; // ลองโมเดลถัดไป
+          // คีย์ผิด/ไม่มีสิทธิ์/คำขอผิดรูปแบบ → ลองโมเดลอื่นก็ไม่ช่วย หยุดทันทีพร้อมบอกสาเหตุชัดเจน
+          if (res.status === 400 || res.status === 401 || res.status === 403){
+            if (/API key|API_KEY|PERMISSION|UNAUTHENTICATED/i.test(errText)){
+              throw new Error('API Key ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้งาน — ตรวจสอบคีย์ที่ aistudio.google.com/apikey แล้วใส่ใหม่');
+            }
+          }
+          continue modelLoop; // 404/429/5xx ฯลฯ → โมเดลถัดไป
+        } catch(e){
+          clearTimeout(timer);
+          if (e && /API Key ไม่ถูกต้อง/.test(e.message || '')) throw e;
+          const isTimeout = e && e.name === 'AbortError';
+          lastErr = isTimeout ? new Error('TIMEOUT') : new Error('NETWORK');
+          // วนลองซ้ำโมเดลเดิม (attempt 2) แล้วค่อยตัดสินใจด้านล่าง
         }
-        data = await res.json();
-        break;
-      } catch(e){
-        lastErr = e;
       }
+      // ล้มเหลวแบบเครือข่าย 2 ครั้งติด → โมเดลอื่นก็จะเจอเหมือนกัน หยุดเลย ไม่ต้องรอไล่ครบทุกโมเดล
+      if (lastErr && (lastErr.message === 'NETWORK' || lastErr.message === 'TIMEOUT')) break;
     }
-    if (!data) throw lastErr || new Error('ไม่สามารถเรียกโมเดลใดได้เลย');
+    if (!data){
+      if (lastErr && lastErr.message === 'NETWORK') throw new Error('เชื่อมต่อ Google ไม่ได้ — ตรวจสอบอินเทอร์เน็ต (ลองสลับ Wi-Fi/4G/5G), ปิด VPN/ตัวบล็อกโฆษณา หรือถ้าเปิดจากแอป LINE/Facebook ให้เปิดใน Chrome/Safari แทน');
+      if (lastErr && lastErr.message === 'TIMEOUT') throw new Error('รอนานเกิน 60 วินาที — สัญญาณอินเทอร์เน็ตช้า ลองใหม่อีกครั้ง หรือใช้รูปที่เล็กลง');
+      throw lastErr || new Error('ไม่สามารถเรียกโมเดลใดได้เลย');
+    }
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) throw new Error('AI ไม่ได้ส่งข้อมูลกลับมา ลองใหม่อีกครั้ง');
 
