@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://generativelanguage.googleapis.com" crossorigin>
 <title>อ่านใบนัด/ฉลากยาด้วย AI — Medical Manager</title>
 <style>
   /* ธีม Smart & Calming Health (v2 theme) — เดิมเป็นโทนส้ม/ครีมของต้นแบบอื่น เปลี่ยนให้ตรงกับธีมหลักของแอป */
@@ -47,7 +48,7 @@
      คอมเมนต์เหนือ input ทั้งสองด้านบน / scanner.css รอบแก้เดียวกัน */
   .visually-hidden-file{position:fixed; top:-9999px; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;}
   .thumbs{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
-  .thumb{position:relative; width:76px; height:76px; border-radius:10px; overflow:hidden; border:1.5px solid var(--line);}
+  .thumb{position:relative; width:92px; height:92px; border-radius:10px; overflow:hidden; border:1.5px solid var(--line);}
   .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
   .thumb .rm{
     position:absolute; top:2px; right:2px; background:rgba(0,0,0,.55); color:#fff; border:none;
@@ -71,6 +72,30 @@
   .tri{display:flex; gap:6px;}
   .tri button{flex:1; padding:9px 6px; border-radius:10px; border:1.5px solid var(--line); background:var(--card); color:var(--ink); font-size:12.5px; cursor:pointer;}
   .tri button.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+
+  /* เพิ่ม v1.146: ขนาดไฟล์ ก่อน→หลังย่อ บนรูปย่อ + การ์ดแสดงสถานะการอ่านทีละขั้น */
+  .thumb .sz{position:absolute; left:0; right:0; bottom:0; background:rgba(0,0,0,.6); color:#fff; font-size:9.5px; line-height:1.5; text-align:center; white-space:nowrap; padding:1px 0;}
+  #progressCard{display:none;}
+  .pg-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px;}
+  .pg-title{font-size:15px; font-weight:800;}
+  .pg-time{font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .pg-steps{list-style:none; margin:0; padding:0;}
+  .pg-steps li{display:flex; gap:10px; align-items:flex-start; padding:7px 0;}
+  .pg-ic{flex:0 0 22px; width:22px; height:22px; margin-top:1px; border-radius:50%; border:2.5px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; color:#fff;}
+  .pg-steps li.done .pg-ic{background:#059669; border-color:#059669;}
+  .pg-steps li.active .pg-ic{border-color:rgba(0,0,0,.1); border-top-color:var(--accent); animation:spin .8s linear infinite;}
+  .pg-steps li.error .pg-ic{background:var(--danger); border-color:var(--danger);}
+  .pg-t{font-size:14px; color:var(--ink-soft);}
+  .pg-steps li.done .pg-t, .pg-steps li.active .pg-t, .pg-steps li.error .pg-t{color:var(--ink);}
+  .pg-steps li.active .pg-t{font-weight:800;}
+  .pg-s{font-size:12px; color:var(--ink-soft); margin-top:1px; line-height:1.5;}
+  .pg-info{background:#F1F5F9; background:color-mix(in srgb, var(--accent) 9%, #fff); color:var(--ink); border-radius:12px; padding:11px 13px; font-size:13px; line-height:1.65; margin:10px 0 12px; white-space:pre-line; word-break:break-word;}
+  .pg-info.ok{background:#ECFDF5; color:#065F46;}
+  .pg-info.err{background:#FDEDED; color:#B91C3C;}
+  .pg-bar{height:8px; background:#E2E8F0; border-radius:99px; overflow:hidden; position:relative; margin-bottom:14px;}
+  .pg-bar span{position:absolute; top:0; bottom:0; left:-35%; width:35%; background:var(--accent); border-radius:99px; animation:pgslide 1.4s ease-in-out infinite;}
+  .pg-bar.done span{animation:none; left:0; width:100%; background:#059669;}
+  @keyframes pgslide{0%{left:-35%;}100%{left:100%;}}
 </style>
 </head>
 <body>
@@ -111,9 +136,19 @@
     <button class="btn btn-ghost" id="galleryBtn">🖼️ เลือกจากคลังภาพ</button>
   </div>
   <div class="thumbs" id="thumbs"></div>
+  <div class="hint" id="thumbHint" style="display:none;">ระบบจะย่อรูปให้อัตโนมัติก่อนส่ง เพื่อให้อ่านเร็วขึ้น</div>
 </div>
 
 <button class="btn btn-primary" id="readBtn">🤖 อ่านด้วย AI</button>
+
+<!-- เพิ่ม v1.146: การ์ดแสดงสถานะการอ่านแบบทีละขั้น (เตรียมรูป → ส่งให้ AI → AI เขียนผลลัพธ์ → ตรวจผลลัพธ์) + ตัวนับเวลา + ปุ่มยกเลิก -->
+<div class="card" id="progressCard" style="margin-top:14px;">
+  <div class="pg-head"><div class="pg-title" id="pgTitle">กำลังอ่านรูป</div><div class="pg-time" id="pgTime"></div></div>
+  <ol class="pg-steps" id="pgSteps"></ol>
+  <div class="pg-info" id="pgInfo" style="display:none;"></div>
+  <div class="pg-bar" id="pgBar"><span></span></div>
+  <button class="btn btn-ghost" id="cancelBtn" type="button">⊗ ยกเลิกการอ่าน</button>
+</div>
 <div id="statusArea"></div>
 
 <!-- ========== ฟอร์มตรวจสอบผล: บัตรนัด ========== -->
@@ -240,10 +275,24 @@ const apiKeyInput = document.getElementById('apiKey');
 apiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
 apiKeyInput.addEventListener('input', () => localStorage.setItem('gemini_api_key', apiKeyInput.value.trim()));
 
-let files = [];
+// ============================================================
+// เพิ่ม v1.146: เลือกรูป → ย่อรูป "ทันที" ในพื้นหลัง (ไม่รอให้กดปุ่มอ่าน) แล้วโชว์ขนาดก่อน→หลังบนรูปย่อ
+// พอกด "อ่านด้วย AI" รูปพร้อมส่งแล้ว ประหยัดเวลาไปได้หลายวินาที
+// ============================================================
+let items = []; // { file, url, origSize, result:{mime,b64,size}|null, promise, labelEl }
+const IMG_MAX_SIDE = 1280;  // เดิม 1600 — ฉลากยา/ใบนัดตัวหนังสือใหญ่พอ 1280 ยังอ่านชัด แต่เล็กลง ~35% ส่ง/ประมวลผลเร็วขึ้น
+const IMG_QUALITY = 0.82;
+
+function fmtKB_(bytes){
+  return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
 
 function handlePickedFiles_(e){
-  files = files.concat(Array.from(e.target.files));
+  Array.from(e.target.files).forEach(f => {
+    const it = { file: f, url: URL.createObjectURL(f), origSize: f.size, result: null, labelEl: null };
+    it.promise = compressImage_(f).then(r => { it.result = r; updateThumbLabel_(it); return r; });
+    items.push(it);
+  });
   renderThumbs();
   e.target.value = ''; // เคลียร์ค่าเพื่อให้เลือกไฟล์เดิมซ้ำได้อีกครั้งถ้าต้องการ
 }
@@ -253,17 +302,26 @@ document.getElementById('galleryBtn').onclick = () => document.getElementById('g
 document.getElementById('cameraInput').onchange = handlePickedFiles_;
 document.getElementById('galleryInput').onchange = handlePickedFiles_;
 
+function updateThumbLabel_(it){
+  if (!it.labelEl) return;
+  it.labelEl.textContent = it.result
+    ? fmtKB_(it.origSize) + ' → ' + fmtKB_(it.result.size)
+    : 'กำลังย่อ…';
+}
+
 function renderThumbs(){
   const wrap = document.getElementById('thumbs');
   wrap.innerHTML = '';
-  files.forEach((f, i) => {
-    const url = URL.createObjectURL(f);
+  items.forEach((it, i) => {
     const div = document.createElement('div');
     div.className = 'thumb';
-    div.innerHTML = `<img src="${url}"><button class="rm" data-i="${i}">✕</button>`;
-    div.querySelector('.rm').onclick = () => { files.splice(i, 1); renderThumbs(); };
+    div.innerHTML = `<img src="${it.url}"><button class="rm" type="button">✕</button><div class="sz"></div>`;
+    div.querySelector('.rm').onclick = () => { URL.revokeObjectURL(it.url); items.splice(i, 1); renderThumbs(); };
+    it.labelEl = div.querySelector('.sz');
+    updateThumbLabel_(it);
     wrap.appendChild(div);
   });
+  document.getElementById('thumbHint').style.display = items.length ? '' : 'none';
 }
 
 function fileToBase64(file){
@@ -275,31 +333,45 @@ function fileToBase64(file){
   });
 }
 
-// เพิ่ม v1.143: ย่อรูปให้ด้านยาวสุดไม่เกิน 1600px แล้วบีบเป็น JPEG คุณภาพ 0.85 (ตัวหนังสือบนฉลากยังอ่านชัด
-// แต่ไฟล์เหลือประมาณ 200-500 KB) — ถ้าย่อไม่ได้ (เช่น ไฟล์ HEIC บางเครื่อง) ใช้ไฟล์ต้นฉบับแทน
+// แก้ v1.143: ย่อรูปก่อนส่ง (รูปกล้องมือถือใหญ่ 3-10 MB อัปโหลดช้า/หลุด = "Failed to fetch")
+// แก้ v1.146: ใช้ createImageBitmap (ถอดรหัส/หมุนรูปตาม EXIF เร็วกว่า Image()), ด้านยาวสุด 1280px, ถ้าเป็น JPEG เล็กอยู่แล้ว
+// และไม่ต้องย่อ จะใช้ไฟล์เดิม (ไม่บีบซ้ำให้ใหญ่ขึ้น) — ถ้าย่อไม่ได้ (เช่น HEIC บางเครื่อง) ใช้ไฟล์ต้นฉบับแทน
 async function compressImage_(file){
-  const MAX = 1600;
+  let tmpUrl = null;
   try{
-    const url = URL.createObjectURL(file);
-    const img = await new Promise((resolve, reject) => {
-      const im = new Image();
-      im.onload = () => resolve(im);
-      im.onerror = () => reject(new Error('decode'));
-      im.src = url;
-    });
-    let w = img.naturalWidth, h = img.naturalHeight;
-    const scale = Math.min(1, MAX / Math.max(w, h));
-    w = Math.round(w * scale); h = Math.round(h * scale);
+    let src = null, w = 0, h = 0;
+    if (window.createImageBitmap){
+      try{ src = await createImageBitmap(file, { imageOrientation: 'from-image' }); w = src.width; h = src.height; }
+      catch(_){ src = null; }
+    }
+    if (!src){
+      tmpUrl = URL.createObjectURL(file);
+      src = await new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error('decode'));
+        im.src = tmpUrl;
+      });
+      w = src.naturalWidth; h = src.naturalHeight;
+    }
+    const scale = Math.min(1, IMG_MAX_SIDE / Math.max(w, h));
+    const cw = Math.round(w * scale), ch = Math.round(h * scale);
     const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
+    canvas.width = cw; canvas.height = ch;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
-    URL.revokeObjectURL(url);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    return { mime: 'image/jpeg', b64: dataUrl.split(',')[1] };
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(src, 0, 0, cw, ch);
+    if (src.close) src.close();
+    const b64 = canvas.toDataURL('image/jpeg', IMG_QUALITY).split(',')[1];
+    const size = Math.round(b64.length * 3 / 4);
+    if (scale === 1 && file.type === 'image/jpeg' && file.size <= size){
+      return { mime: 'image/jpeg', b64: await fileToBase64(file), size: file.size };
+    }
+    return { mime: 'image/jpeg', b64, size };
   } catch(e){
-    return { mime: file.type || 'image/jpeg', b64: await fileToBase64(file) };
+    return { mime: file.type || 'image/jpeg', b64: await fileToBase64(file), size: file.size };
+  } finally{
+    if (tmpUrl) URL.revokeObjectURL(tmpUrl);
   }
 }
 
@@ -370,91 +442,330 @@ const MED_PROMPT = `คุณกำลังดูภาพ "ฉลากยา"
 - ห้ามเดาข้อมูลที่ไม่ปรากฏในภาพเด็ดขาด เว้นว่างไว้ดีกว่าเดา
 ตอบกลับเป็น JSON เท่านั้น`;
 
+// ============================================================
+// เพิ่ม v1.146: แสดงสถานะการอ่านทุกขั้นตอนแบบ real-time (เตรียมรูป → ส่งให้ AI → AI เขียนผลลัพธ์ → ตรวจผลลัพธ์)
+// มีตัวนับเวลา, ชื่อโมเดล, นับถอยหลังก่อนสลับโมเดลสำรอง และปุ่มยกเลิก
+// ============================================================
+const STEP_TITLES = ['เตรียมรูป', 'ส่งรูปให้ AI และรอผล', 'AI กำลังเขียนผลลัพธ์', 'ตรวจผลลัพธ์'];
+let stepState = [], stepSub = [];
+let currentRun = null;
+
+function renderSteps_(){
+  const ol = document.getElementById('pgSteps');
+  ol.innerHTML = '';
+  STEP_TITLES.forEach((t, i) => {
+    const st = stepState[i] || 'pending';
+    const li = document.createElement('li');
+    li.className = st;
+    const icon = st === 'done' ? '✓' : (st === 'error' ? '✕' : '');
+    li.innerHTML = `<span class="pg-ic">${icon}</span><div><div class="pg-t"></div><div class="pg-s"></div></div>`;
+    li.querySelector('.pg-t').textContent = t;
+    const sub = li.querySelector('.pg-s');
+    if (stepSub[i] && st !== 'pending') sub.textContent = stepSub[i]; else sub.style.display = 'none';
+    ol.appendChild(li);
+  });
+}
+function setStep_(i, state, sub){
+  stepState[i] = state;
+  if (sub !== undefined) stepSub[i] = sub;
+  renderSteps_();
+}
+function setInfo_(text, kind){
+  const el = document.getElementById('pgInfo');
+  el.textContent = text;
+  el.className = 'pg-info' + (kind ? ' ' + kind : '');
+  el.style.display = text ? '' : 'none';
+}
+
+function progressStart_(run, title){
+  stepState = []; stepSub = [];
+  document.getElementById('pgTitle').textContent = title;
+  document.getElementById('pgTime').textContent = 'ใช้เวลา 0 วินาที';
+  document.getElementById('pgBar').className = 'pg-bar';
+  document.getElementById('cancelBtn').style.display = '';
+  document.getElementById('progressCard').style.display = 'block';
+  setInfo_('');
+  renderSteps_();
+  run.tick = setInterval(() => tick_(run), 500);
+  document.getElementById('progressCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function progressStop_(run){
+  clearInterval(run.tick);
+  document.getElementById('pgTime').textContent = 'ใช้เวลา ' + Math.floor((Date.now() - run.start) / 1000) + ' วินาที';
+  document.getElementById('cancelBtn').style.display = 'none';
+}
+function tick_(run){
+  document.getElementById('pgTime').textContent = 'ใช้เวลา ' + Math.floor((Date.now() - run.start) / 1000) + ' วินาที';
+  const cur = run.cur;
+  if (cur && !cur.got){
+    const wait = Math.floor((Date.now() - cur.sentAt) / 1000);
+    const limit = Math.round(cur.firstByteMs / 1000);
+    let msg = (run.notice ? run.notice + '\n' : '') +
+      `ส่งรูป ${run.imgCount} รูป (${fmtKB_(run.totalBytes)}) ให้ AI แล้ว กำลังรอ AI ประมวลผล…\nโมเดล: ${cur.model}`;
+    if (wait >= 10){
+      msg += `\n⏳ ใช้เวลานานกว่าปกติเล็กน้อย — ถ้าเกิน ${limit} วินาที ระบบจะสลับไปใช้โมเดลสำรองให้อัตโนมัติ (เหลือ ${Math.max(0, limit - wait)} วินาที)`;
+    }
+    setInfo_(msg);
+  }
+}
+
+document.getElementById('cancelBtn').onclick = () => {
+  if (!currentRun) return;
+  currentRun.cancelled = true;
+  if (currentRun.ctrl) currentRun.ctrl.abort();
+};
+
+// ============================================================
+// เรียก Gemini แบบ streaming (SSE) — รู้ทันทีว่า AI เริ่มตอบแล้ว (ขั้นตอนที่ 3) และไม่ต้องรอจนจบทั้งก้อนก่อนเห็นความคืบหน้า
+// ============================================================
+// ลำดับโมเดล (เหมือนเดิม) — ถ้า Google ออกรุ่นใหม่ แก้/เพิ่มชื่อในลิสต์นี้ได้เลย
+const MODEL_CANDIDATES = ['gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+const FIRST_BYTE_MS_PRIMARY = 30000;  // โมเดลแรก: ไม่ตอบใน 30 วินาที → สลับโมเดลสำรอง
+const FIRST_BYTE_MS_BACKUP  = 40000;  // โมเดลสำรอง: ให้เวลาเพิ่มอีกนิด
+const IDLE_MS = 25000;                // เริ่มตอบแล้วแต่เงียบเกิน 25 วินาที → ถือว่าค้าง
+const TOTAL_CAP_MS = 100000;          // เพดานรวมทุกโมเดล
+
+// เพิ่ม v1.146: ปิด/ลด "การคิด" (thinking) ของ Gemini — งานอ่านฉลากไม่ต้องใช้เหตุผลลึก แต่ถ้าเปิดไว้ (ค่าเริ่มต้นของรุ่น flash)
+// จะเสียเวลาคิดก่อนตอบหลายวินาที. แต่ละรุ่นรองรับพารามิเตอร์ไม่เหมือนกัน จึงลองไล่: budget=0 → level=minimal → ไม่ส่ง
+// (ถ้ารุ่นไหนตอบ 400 เรื่อง thinking จะลองแบบถัดไปทันที แล้วจำผลไว้ใช้ครั้งต่อไป)
+const THINK_VARIANTS = [{ thinkingBudget: 0 }, { thinkingLevel: 'minimal' }, null];
+const thinkChoice = {}; // model -> index ใน THINK_VARIANTS ที่ใช้ได้
+
+function mkErr_(kind, extra){ return Object.assign(new Error(kind), { kind }, extra || {}); }
+
+async function streamOnce_(model, thinkIdx, parts, schema, apiKey, run, firstByteMs){
+  const gen = { responseMimeType: 'application/json', responseSchema: schema };
+  if (THINK_VARIANTS[thinkIdx]) gen.thinkingConfig = THINK_VARIANTS[thinkIdx];
+  const body = JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gen });
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+
+  const ctrl = new AbortController();
+  run.ctrl = ctrl;
+  let timedOut = false, timer = null;
+  const arm = ms => { clearTimeout(timer); timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, ms); };
+  const cur = { model, sentAt: Date.now(), firstByteMs, got: false };
+  run.cur = cur;
+  setStep_(1, 'active', 'โมเดล ' + model);
+  arm(firstByteMs);
+
+  let text = '', finish = null;
+  const onEvent = (raw) => {
+    const data = raw.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('');
+    if (!data) return;
+    let j; try{ j = JSON.parse(data); } catch(_){ return; }
+    if (j.promptFeedback && j.promptFeedback.blockReason) throw mkErr_('blocked', { reason: j.promptFeedback.blockReason });
+    const c = j.candidates && j.candidates[0];
+    if (c && c.content && c.content.parts) c.content.parts.forEach(p => { if (p.text && !p.thought) text += p.text; });
+    if (c && c.finishReason) finish = c.finishReason;
+    if (!cur.got){
+      cur.got = true;
+      setStep_(1, 'done', 'โมเดล ' + model + ' · ตอบกลับใน ' + Math.round((Date.now() - cur.sentAt) / 100) / 10 + ' วินาที');
+      setInfo_((run.notice ? run.notice + '\n' : '') + 'AI เริ่มเขียนผลลัพธ์แล้ว…\nโมเดล: ' + model);
+    }
+    arm(IDLE_MS);
+    setStep_(2, 'active', 'ได้รับข้อมูลแล้ว ' + text.length + ' ตัวอักษร');
+  };
+
+  try{
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body, signal: ctrl.signal
+    });
+    if (!res.ok){
+      const t = await res.text();
+      throw mkErr_('http', { status: res.status, body: t });
+    }
+    if (res.body && res.body.getReader){
+      const reader = res.body.getReader(), dec = new TextDecoder();
+      let buf = '';
+      for (;;){
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf = (buf + dec.decode(value, { stream: true })).replace(/\r\n/g, '\n');
+        let idx;
+        while ((idx = buf.indexOf('\n\n')) >= 0){ const ev = buf.slice(0, idx); buf = buf.slice(idx + 2); onEvent(ev); }
+      }
+      if (buf.trim()) onEvent(buf);
+    } else {
+      // เบราว์เซอร์ที่ไม่รองรับ stream — อ่านทั้งก้อนแล้วแยก event เอง (ยังทำงานได้ แค่ไม่เห็นความคืบหน้าระหว่างทาง)
+      (await res.text()).replace(/\r\n/g, '\n').split('\n\n').forEach(onEvent);
+    }
+    clearTimeout(timer);
+    if (!text) throw mkErr_('empty', { finish });
+    return { text, finish };
+  } catch(e){
+    clearTimeout(timer);
+    if (run.cancelled) throw mkErr_('cancel');
+    if (e && e.kind) throw e;
+    if (timedOut) throw mkErr_('timeout', { got: cur.got });
+    throw mkErr_('network');
+  }
+}
+
+async function readWithFallback_(parts, schema, apiKey, run){
+  let lastErr = null;
+  outer:
+  for (let mi = 0; mi < MODEL_CANDIDATES.length; mi++){
+    const model = MODEL_CANDIDATES[mi];
+    const firstByteMs = mi === 0 ? FIRST_BYTE_MS_PRIMARY : FIRST_BYTE_MS_BACKUP;
+    let thinkIdx = thinkChoice[model] || 0;
+    let netTries = 0;
+    for (;;){
+      if (run.cancelled) throw mkErr_('cancel');
+      if (Date.now() - run.start > TOTAL_CAP_MS){ lastErr = lastErr || mkErr_('timeout'); break outer; }
+      try{
+        const r = await streamOnce_(model, thinkIdx, parts, schema, apiKey, run, firstByteMs);
+        thinkChoice[model] = thinkIdx;
+        return { text: r.text, model };
+      } catch(e){
+        if (e.kind === 'cancel') throw e;
+        lastErr = e;
+        if (e.kind === 'http'){
+          // คีย์ผิด/ไม่มีสิทธิ์ → ลองโมเดลอื่นก็ไม่ช่วย หยุดทันที
+          if ([400, 401, 403].includes(e.status) && /API key|API_KEY|PERMISSION|UNAUTHENTICATED/i.test(e.body)){
+            throw new Error('API Key ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้งาน — ตรวจสอบคีย์ที่ aistudio.google.com/apikey แล้วใส่ใหม่');
+          }
+          // รุ่นนี้ไม่รับพารามิเตอร์ thinking แบบที่ส่งไป → ลองแบบถัดไปกับโมเดลเดิม
+          if (e.status === 400 && /thinking/i.test(e.body) && thinkIdx < THINK_VARIANTS.length - 1){ thinkIdx++; continue; }
+          lastErr = new Error(`[${model}] API error ${e.status}: ${(e.body || '').slice(0, 200)}`);
+          lastErr.kind = 'http';
+          break; // 404/429/5xx ฯลฯ → โมเดลถัดไป
+        }
+        if (e.kind === 'network'){
+          // เน็ตสะดุด → ลองซ้ำโมเดลเดิม 1 ครั้ง; ซ้ำอีก = โมเดลอื่นก็เจอเหมือนกัน หยุดเลย
+          if (netTries < 1){ netTries++; run.notice = '📶 เครือข่ายสะดุด กำลังลองส่งใหม่…'; continue; }
+          break outer;
+        }
+        break; // timeout / empty / blocked → โมเดลถัดไป
+      }
+    }
+    if (mi < MODEL_CANDIDATES.length - 1){
+      const next = MODEL_CANDIDATES[mi + 1];
+      const why = lastErr && lastErr.kind === 'timeout' ? 'ไม่ตอบภายในเวลาที่กำหนด' : 'ใช้งานไม่ได้ชั่วคราว';
+      run.notice = `🔁 โมเดล ${model} ${why} — สลับไปใช้ ${next} แล้ว`;
+      setStep_(1, 'active', run.notice);
+    }
+  }
+  throw lastErr || new Error('ไม่สามารถเรียกโมเดลใดได้เลย');
+}
+
+// ============================================================
+// ขั้นตอนที่ 4: ตรวจผลลัพธ์ — แปลงปี พ.ศ. ที่หลุดมา, เช็กรูปแบบวัน/เวลา, แจ้งช่องสำคัญที่ AI อ่านไม่เจอ
+// ============================================================
+function validateParsed_(p){
+  const warns = [];
+  const fixDate = (key, label) => {
+    const v = p[key];
+    if (!v) return;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v).trim());
+    if (!m){ warns.push(`${label} อ่านได้ไม่ตรงรูปแบบ ("${v}") — กรอกเองในฟอร์มด้านล่าง`); p[key] = ''; return; }
+    let y = Number(m[1]);
+    if (y > 2400){ y -= 543; p[key] = `${y}-${m[2]}-${m[3]}`; warns.push(`${label}: แปลงปี พ.ศ. เป็น ค.ศ. ให้แล้ว (${p[key]}) — ตรวจสอบอีกครั้ง`); }
+  };
+  if (docType === 'medicine'){
+    fixDate('start_date', 'วันที่เริ่มใช้');
+    if (!p.medicine_name) warns.push('AI อ่านชื่อยาไม่เจอ — กรอกเอง');
+  } else {
+    fixDate('appointment_date', 'วันที่นัด');
+    if (p.appointment_time){
+      const m = /^(\d{1,2}):(\d{2})/.exec(String(p.appointment_time).trim());
+      if (m) p.appointment_time = String(m[1]).padStart(2, '0') + ':' + m[2];
+      else { warns.push(`เวลานัดอ่านได้ไม่ตรงรูปแบบ ("${p.appointment_time}") — กรอกเอง`); p.appointment_time = ''; }
+    }
+    const miss = [];
+    if (!p.hospital) miss.push('โรงพยาบาล');
+    if (!p.appointment_date) miss.push('วันที่นัด');
+    if (!p.appointment_time) miss.push('เวลานัด');
+    if (miss.length) warns.push('AI อ่านไม่เจอ: ' + miss.join(', ') + ' — กรอกเองก่อนกดยืนยัน');
+  }
+  return warns;
+}
+
+function parseModelJson_(raw){
+  let s = String(raw).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  return JSON.parse(s);
+}
+
+function toLocalInput_(d){ // YYYY-MM-DDTHH:MM ตามเวลาเครื่อง (แก้ v1.146: เดิมใช้ toISOString() เป็น UTC ทำให้เวลาเริ่มงดเพี้ยนไป 7 ชม. ในไทย)
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 document.getElementById('readBtn').onclick = async () => {
   const apiKey = apiKeyInput.value.trim();
   if (!apiKey){ setStatus('<div class="error-box">กรุณาใส่ Gemini API Key ก่อน</div>'); return; }
-  if (files.length === 0){ setStatus('<div class="error-box">กรุณาเลือก/ถ่ายรูปอย่างน้อย 1 รูป</div>'); return; }
+  if (items.length === 0){ setStatus('<div class="error-box">กรุณาเลือก/ถ่ายรูปอย่างน้อย 1 รูป</div>'); return; }
 
   const btn = document.getElementById('readBtn');
   btn.disabled = true;
-  setStatus('<div class="spinner"></div><div class="status">กำลังแปลงรูปและอ่านด้วย AI...</div>');
+  setStatus('');
+  document.getElementById('reviewApptCard').style.display = 'none';
+  document.getElementById('reviewMedCard').style.display = 'none';
 
   const schema = docType === 'medicine' ? MED_SCHEMA : APPT_SCHEMA;
   const prompt = docType === 'medicine' ? MED_PROMPT : APPT_PROMPT;
+  const run = { start: Date.now(), cancelled: false, ctrl: null, cur: null, notice: '', tick: null, imgCount: items.length, totalBytes: 0 };
+  currentRun = run;
+  progressStart_(run, docType === 'medicine' ? 'กำลังอ่านรูปฉลากยา' : 'กำลังอ่านรูปบัตรนัด');
 
   try{
-    // แก้ v1.143: ย่อ/บีบอัดรูปก่อนส่ง — รูปจากกล้องมือถือใหญ่ 3-10 MB พอแปลงเป็น base64 แล้วโตขึ้นอีก ~33%
-    // ทำให้อัปโหลดช้า/หลุดกลางทาง เบราว์เซอร์รายงานเป็น "Failed to fetch" (ไม่ใช่ปัญหา API Key)
-    const parts = [{ text: prompt }];
-    for (let i = 0; i < files.length; i++){
-      setStatus(`<div class="spinner"></div><div class="status">กำลังย่อรูป ${i + 1}/${files.length}...</div>`);
-      const img = await compressImage_(files[i]);
-      parts.push({ inline_data: { mime_type: img.mime, data: img.b64 } });
-    }
-    setStatus('<div class="spinner"></div><div class="status">กำลังส่งให้ AI อ่าน (ใช้เวลาประมาณ 5-30 วินาที)...</div>');
+    // ขั้นที่ 1: เตรียมรูป (ส่วนใหญ่ย่อเสร็จแล้วตั้งแต่ตอนเลือกรูป)
+    setStep_(0, 'active', `กำลังย่อรูป ${items.length} รูป…`);
+    const imgs = await Promise.all(items.map(it => it.promise));
+    if (run.cancelled) throw mkErr_('cancel');
+    run.totalBytes = imgs.reduce((s, x) => s + x.size, 0);
+    setStep_(0, 'done', `${imgs.length} รูป · รวม ${fmtKB_(run.totalBytes)}`);
 
-    // ลองไล่ทีละโมเดล เฉพาะกรณีโมเดลนั้นใช้ไม่ได้ (404/429/5xx)
-    // (ถ้า Google ออกรุ่นใหม่กว่านี้ในอนาคต แก้/เพิ่มชื่อโมเดลในลิสต์นี้ได้เลย)
-    const MODEL_CANDIDATES = ['gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
-    const reqBody = JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: { responseMimeType: 'application/json', responseSchema: schema }
-    });
+    // Gemini แนะนำให้วางรูปก่อนข้อความคำสั่ง
+    const parts = imgs.map(img => ({ inline_data: { mime_type: img.mime, data: img.b64 } }));
+    parts.push({ text: prompt });
 
-    let data = null;
-    let lastErr = null;
-    modelLoop:
-    for (const model of MODEL_CANDIDATES){
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      // network error / timeout → ลองซ้ำโมเดลเดิมอีก 1 ครั้ง (เน็ตมือถือสะดุดชั่วคราวเป็นเรื่องปกติ)
-      for (let attempt = 1; attempt <= 2; attempt++){
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 60000);
-        try{
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-            body: reqBody,
-            signal: ctrl.signal
-          });
-          clearTimeout(timer);
-          if (res.ok){ data = await res.json(); break modelLoop; }
-          const errText = await res.text();
-          lastErr = new Error(`[${model}] API error ${res.status}: ${errText.slice(0,200)}`);
-          // คีย์ผิด/ไม่มีสิทธิ์/คำขอผิดรูปแบบ → ลองโมเดลอื่นก็ไม่ช่วย หยุดทันทีพร้อมบอกสาเหตุชัดเจน
-          if (res.status === 400 || res.status === 401 || res.status === 403){
-            if (/API key|API_KEY|PERMISSION|UNAUTHENTICATED/i.test(errText)){
-              throw new Error('API Key ไม่ถูกต้องหรือไม่มีสิทธิ์ใช้งาน — ตรวจสอบคีย์ที่ aistudio.google.com/apikey แล้วใส่ใหม่');
-            }
-          }
-          continue modelLoop; // 404/429/5xx ฯลฯ → โมเดลถัดไป
-        } catch(e){
-          clearTimeout(timer);
-          if (e && /API Key ไม่ถูกต้อง/.test(e.message || '')) throw e;
-          const isTimeout = e && e.name === 'AbortError';
-          lastErr = isTimeout ? new Error('TIMEOUT') : new Error('NETWORK');
-          // วนลองซ้ำโมเดลเดิม (attempt 2) แล้วค่อยตัดสินใจด้านล่าง
-        }
-      }
-      // ล้มเหลวแบบเครือข่าย 2 ครั้งติด → โมเดลอื่นก็จะเจอเหมือนกัน หยุดเลย ไม่ต้องรอไล่ครบทุกโมเดล
-      if (lastErr && (lastErr.message === 'NETWORK' || lastErr.message === 'TIMEOUT')) break;
-    }
-    if (!data){
-      if (lastErr && lastErr.message === 'NETWORK') throw new Error('เชื่อมต่อ Google ไม่ได้ — ตรวจสอบอินเทอร์เน็ต (ลองสลับ Wi-Fi/4G/5G), ปิด VPN/ตัวบล็อกโฆษณา หรือถ้าเปิดจากแอป LINE/Facebook ให้เปิดใน Chrome/Safari แทน');
-      if (lastErr && lastErr.message === 'TIMEOUT') throw new Error('รอนานเกิน 60 วินาที — สัญญาณอินเทอร์เน็ตช้า ลองใหม่อีกครั้ง หรือใช้รูปที่เล็กลง');
-      throw lastErr || new Error('ไม่สามารถเรียกโมเดลใดได้เลย');
-    }
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) throw new Error('AI ไม่ได้ส่งข้อมูลกลับมา ลองใหม่อีกครั้ง');
+    // ขั้นที่ 2-3: ส่งให้ AI และรับผลแบบ stream (สถานะอัปเดตในฟังก์ชันนี้)
+    setStep_(1, 'active', 'กำลังเชื่อมต่อ…');
+    const { text, model } = await readWithFallback_(parts, schema, apiKey, run);
+    setStep_(2, 'done', `ได้รับข้อมูลครบ ${text.length} ตัวอักษร`);
 
-    const parsed = JSON.parse(rawText);
+    // ขั้นที่ 4: ตรวจผลลัพธ์
+    setStep_(3, 'active', 'กำลังตรวจรูปแบบวันที่/เวลา และช่องที่จำเป็น…');
+    setInfo_('กำลังตรวจผลลัพธ์…');
+    let parsed;
+    try{ parsed = parseModelJson_(text); }
+    catch(_){ throw new Error('AI ตอบกลับมาในรูปแบบที่อ่านไม่ได้ ลองใหม่อีกครั้ง (หรือถ่ายรูปให้ชัดขึ้น)'); }
+    const warns = validateParsed_(parsed);
+    setStep_(3, 'done', warns.length ? `พบ ${warns.length} จุดที่ควรตรวจสอบ` : 'ผ่านการตรวจเบื้องต้น');
+
+    progressStop_(run);
+    document.getElementById('pgTitle').textContent = 'อ่านเสร็จแล้ว';
+    document.getElementById('pgBar').className = 'pg-bar done';
+    setInfo_(`✅ อ่านเสร็จแล้ว (โมเดล ${model}) — ตรวจสอบด้านล่างก่อนส่งกลับ${docType === 'appointment' ? ' โดยเฉพาะเรื่องงดน้ำ/อาหาร' : ''}`, 'ok');
+
     if (docType === 'medicine') showMedReview(parsed); else showApptReview(parsed);
-    setStatus('<div class="status">✅ อ่านเสร็จแล้ว ตรวจสอบด้านล่างก่อนส่งกลับ (โดยเฉพาะเรื่องงดน้ำ/อาหารถ้าเป็นนัดหมาย)</div>');
+    if (warns.length) setStatus('<div class="warn-box">⚠️ ' + warns.map(w => w.replace(/</g, '&lt;')).join('<br>⚠️ ') + '</div>');
 
   } catch(err){
-    setStatus(`<div class="error-box">อ่านไม่สำเร็จ: ${err.message || err}<br>ลองตรวจสอบ API Key หรือรูปภาพ แล้วกด "อ่านด้วย AI" อีกครั้ง</div>`);
+    progressStop_(run);
+    if (err && err.kind === 'cancel'){
+      document.getElementById('progressCard').style.display = 'none';
+      setStatus('<div class="status">ยกเลิกการอ่านแล้ว — กด "อ่านด้วย AI" เพื่อเริ่มใหม่ได้ทุกเมื่อ</div>');
+    } else {
+      // ทำเครื่องหมาย ✕ ที่ขั้นตอนที่กำลังทำอยู่
+      const activeIdx = stepState.findIndex(s => s === 'active');
+      if (activeIdx >= 0) setStep_(activeIdx, 'error', stepSub[activeIdx]);
+      document.getElementById('pgTitle').textContent = 'อ่านไม่สำเร็จ';
+      document.getElementById('pgBar').style.display = 'none';
+      let msg;
+      const k = err && err.kind;
+      if (k === 'network') msg = 'เชื่อมต่อ Google ไม่ได้ — ตรวจสอบอินเทอร์เน็ต (ลองสลับ Wi-Fi/4G/5G), ปิด VPN/ตัวบล็อกโฆษณา หรือถ้าเปิดจากแอป LINE/Facebook ให้เปิดใน Chrome/Safari แทน';
+      else if (k === 'timeout') msg = 'AI ตอบช้าเกินกำหนดในทุกโมเดล — สัญญาณอาจช้า ลองใหม่อีกครั้ง หรือลดจำนวนรูป';
+      else if (k === 'blocked') msg = 'AI ปฏิเสธการอ่านรูปนี้ (' + (err.reason || 'blocked') + ') ลองถ่ายรูปใหม่';
+      else if (k === 'empty') msg = 'AI ไม่ได้ส่งข้อมูลกลับมา ลองใหม่อีกครั้ง';
+      else msg = (err && err.message) || String(err);
+      setInfo_('❌ ' + msg + '\nลองตรวจสอบ API Key หรือรูปภาพ แล้วกด "อ่านด้วย AI" อีกครั้ง', 'err');
+    }
   } finally{
     btn.disabled = false;
+    currentRun = null;
   }
 };
 
@@ -478,7 +789,7 @@ function showApptReview(p){
       const apptDt = new Date(p.appointment_date + 'T' + p.appointment_time + ':00');
       if (!isNaN(apptDt.getTime())){
         const startDt = new Date(apptDt.getTime() - Number(p.fasting_hours_before) * 3600000);
-        document.getElementById('aFastingStart').value = startDt.toISOString().slice(0, 16);
+        document.getElementById('aFastingStart').value = toLocalInput_(startDt);
       }
     } catch(e){ /* เดี๋ยวผู้ใช้กรอกเองได้ในฟอร์มหลัก */ }
   }
